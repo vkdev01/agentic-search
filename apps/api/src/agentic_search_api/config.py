@@ -1,27 +1,27 @@
 """All runtime settings, read from environment variables or apps/api/.env (see .env.example)."""
 
+import os
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    """Field names map to upper-case env vars, e.g. `llm_provider` <- LLM_PROVIDER. Empty values are ignored."""
+    """Field names map to upper-case env vars, e.g. `default_model` <- DEFAULT_MODEL. Empty values are ignored.
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore", env_ignore_empty=True)
+    Unknown .env keys are kept (extra="allow") so models.yaml can name API keys stored there; see env_value.
+    """
 
-    llm_provider: Literal["mock", "sarvam", "ollama"] = "mock"
-    sarvam_api_key: SecretStr | None = None
-    sarvam_base_url: str = "https://api.sarvam.ai/v1"
-    sarvam_model: str = "sarvam-105b"
-    # Reasoning tokens count against max_tokens, so leave room for thinking + answer.
-    sarvam_max_tokens: int = 16384
-    sarvam_reasoning_effort: Literal["low", "medium", "high", "max"] = "low"
-    ollama_base_url: str = "http://localhost:11434/v1"
-    ollama_model: str = ""
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="allow", env_ignore_empty=True)
+
+    # Chat models: providers and models live in models.yaml; keys stay in the environment / .env.
+    models_file: Path = Path("models.yaml")
+    default_model: str | None = None
+    """Model id used when a request doesn't pick one, e.g. `sarvam/sarvam-105b` or `ollama/qwen3:8b`."""
+    mock_model: bool = True
+    """List the offline mock model (handy for development; turn off when deployed)."""
 
     search_provider: Literal["mock", "searxng"] = "mock"
     searxng_url: str = "http://localhost:8080"
@@ -32,6 +32,7 @@ class Settings(BaseSettings):
     max_sources: int = 10
 
     llm_usage_db: Path = Path("data/llm_usage.db")
+    # Fallbacks for models that don't set their own context_window / prices in models.yaml.
     context_window_tokens: int = 128_000
     # Optional pricing per 1M tokens; when unset the UI shows tokens only.
     price_input_per_mtok: float | None = None
@@ -39,6 +40,10 @@ class Settings(BaseSettings):
     price_currency: str = "INR"
 
     cors_origins: list[str] = ["http://localhost:3000"]
+
+    def env_value(self, name: str) -> str | None:
+        """A variable from the process environment, else from .env (e.g. an API key named in models.yaml)."""
+        return os.environ.get(name) or (self.model_extra or {}).get(name.lower()) or None
 
 
 @lru_cache

@@ -1,4 +1,4 @@
-"""HTTP entry point: a health check and the streaming chat endpoint. Run with `make api`."""
+"""HTTP entry point: health, the model list, and the streaming chat endpoint. Run with `make api`."""
 
 import logging
 from collections.abc import AsyncIterator
@@ -10,10 +10,17 @@ from fastapi.sse import EventSourceResponse, ServerSentEvent
 
 from agentic_search_api.agent.pipeline import run_agent
 from agentic_search_api.config import get_settings
-from agentic_search_api.dependencies import SettingsDep, get_llm, get_search
+from agentic_search_api.dependencies import (
+    CatalogDep,
+    ChatRequestDep,
+    HttpClientDep,
+    SettingsDep,
+    get_llm,
+    get_search,
+)
 from agentic_search_api.providers.llm import LLM
 from agentic_search_api.providers.search import SearchProvider
-from agentic_search_api.schemas import ChatRequest, ErrorEvent
+from agentic_search_api.schemas import ErrorEvent, ModelInfo, ModelList
 
 log = logging.getLogger(__name__)
 
@@ -28,13 +35,23 @@ app.add_middleware(
 
 @app.get("/health")
 def health(settings: SettingsDep) -> dict[str, str]:
-    """Liveness plus the active providers (the web app shows them in the UI)."""
-    return {"status": "ok", "llm": settings.llm_provider, "search": settings.search_provider}
+    """Liveness plus the active search provider (the web app shows it in the UI)."""
+    return {"status": "ok", "search": settings.search_provider}
+
+
+@app.get("/api/models")
+async def list_models(catalog: CatalogDep, client: HttpClientDep) -> ModelList:
+    """Every model the user can pick: configured providers whose keys are set, plus discovered local models."""
+    specs = await catalog.models(client)
+    return ModelList(
+        default_model=await catalog.default_id(client),
+        models=[ModelInfo.model_validate(spec, from_attributes=True) for spec in specs],
+    )
 
 
 @app.post("/api/chat", response_class=EventSourceResponse)
 async def chat(
-    request: ChatRequest,
+    request: ChatRequestDep,
     settings: SettingsDep,
     llm: Annotated[LLM, Depends(get_llm)],
     search: Annotated[SearchProvider, Depends(get_search)],
