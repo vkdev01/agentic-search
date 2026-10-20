@@ -5,6 +5,7 @@ export interface Source {
   title: string;
   url: string;
   snippet: string;
+  queries?: string[];
 }
 
 export interface SearchStep {

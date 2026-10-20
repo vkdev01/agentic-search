@@ -185,7 +185,13 @@ export function ChatApp() {
                 </div>
               </div>
             ) : (
-              active.messages.map((message) => <MessageView key={message.id} message={message} />)
+              active.messages.map((message, i) => (
+                <MessageView
+                  key={message.id}
+                  message={message}
+                  question={active.messages[i - 1]?.role === "user" ? active.messages[i - 1].content : ""}
+                />
+              ))
             )}
             <div ref={bottomRef} />
           </div>

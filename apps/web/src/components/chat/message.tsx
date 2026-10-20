@@ -1,29 +1,15 @@
-import { Check, Gauge, Globe, Loader2, Sparkles, X } from "lucide-react";
-import Markdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+"use client";
+
+import { Check, Gauge, Globe, Loader2, Network, Sparkles, X } from "lucide-react";
+import { useMemo, useState } from "react";
 import type { ChatMessage, RunUsage, Source } from "@/lib/types";
+import { citedIds, hostname } from "./markdown/citation";
+import { RichMarkdown } from "./markdown/markdown";
+import { ResearchGraph } from "./research-graph";
 
-function hostname(url: string) {
-  try {
-    return new URL(url).hostname.replace(/^www\./, "");
-  } catch {
-    return url;
-  }
-}
-
-/** Turns inline citations like [1] or [1, 2] into links to the matching sources. */
-function linkCitations(content: string, sources: Source[] = []) {
-  const byId = new Map(sources.map((s) => [s.id, s]));
-  return content.replace(/\[(\d+(?:\s*,\s*\d+)*)\](?!\()/g, (match, ids: string) => {
-    const links = ids.split(",").map((n) => {
-      const source = byId.get(Number(n.trim()));
-      return source ? `[[${n.trim()}]](${source.url})` : null;
-    });
-    return links.every(Boolean) ? links.join("") : match;
-  });
-}
-
-function ResearchSteps({ message }: { message: ChatMessage }) {
+function ResearchSteps({ message, question }: { message: ChatMessage; question: string }) {
+  const [showGraph, setShowGraph] = useState(false);
+  const cited = useMemo(() => citedIds(message.content), [message.content]);
   const steps = message.steps ?? [];
   if (steps.length === 0) {
     return message.status === "streaming" && !message.content ? (
@@ -50,6 +36,21 @@ function ResearchSteps({ message }: { message: ChatMessage }) {
           </li>
         ))}
       </ul>
+      {!researching && message.status !== "streaming" && (message.sources?.length ?? 0) > 0 && (
+        <>
+          <button
+            type="button"
+            onClick={() => setShowGraph((on) => !on)}
+            aria-expanded={showGraph}
+            className="mt-3 inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+          >
+            <Network className="size-3.5" /> {showGraph ? "Hide" : "Show"} research graph
+          </button>
+          {showGraph && (
+            <ResearchGraph question={question} steps={steps} sources={message.sources ?? []} citedIds={cited} />
+          )}
+        </>
+      )}
     </details>
   );
 }
@@ -92,7 +93,7 @@ function UsageLine({ usage }: { usage: RunUsage }) {
   );
 }
 
-export function MessageView({ message }: { message: ChatMessage }) {
+export function MessageView({ message, question = "" }: { message: ChatMessage; question?: string }) {
   if (message.role === "user") {
     return (
       <div className="flex justify-end">
@@ -107,15 +108,14 @@ export function MessageView({ message }: { message: ChatMessage }) {
         <Sparkles className="size-3.5 text-primary" />
       </span>
       <div className="min-w-0 flex-1 space-y-4">
-        <ResearchSteps message={message} />
+        <ResearchSteps message={message} question={question} />
         {message.content && (
-          <div className="markdown">
-            <Markdown
-              remarkPlugins={[remarkGfm]}
-              components={{ a: (props) => <a {...props} target="_blank" rel="noreferrer" /> }}
-            >
-              {linkCitations(message.content, message.sources)}
-            </Markdown>
+          <div>
+            <RichMarkdown
+              content={message.content}
+              sources={message.sources ?? []}
+              streaming={message.status === "streaming"}
+            />
             {message.status === "streaming" && <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse bg-foreground/60 align-middle" />}
           </div>
         )}
