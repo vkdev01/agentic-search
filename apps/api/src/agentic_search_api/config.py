@@ -1,4 +1,5 @@
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal
 
 from pydantic import SecretStr
@@ -12,6 +13,9 @@ class Settings(BaseSettings):
     sarvam_api_key: SecretStr | None = None
     sarvam_base_url: str = "https://api.sarvam.ai/v1"
     sarvam_model: str = "sarvam-105b"
+    # Reasoning tokens count against max_tokens, so leave room for thinking + answer.
+    sarvam_max_tokens: int = 16384
+    sarvam_reasoning_effort: Literal["low", "medium", "high", "max"] = "low"
     ollama_base_url: str = "http://localhost:11434/v1"
     ollama_model: str = ""
 
@@ -21,6 +25,8 @@ class Settings(BaseSettings):
     max_sub_queries: int = 4
     results_per_query: int = 5
     max_sources: int = 10
+
+    llm_usage_db: Path = Path("data/llm_usage.db")
 
     cors_origins: list[str] = ["http://localhost:3000"]
 

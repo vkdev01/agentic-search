@@ -12,6 +12,10 @@ __pycache__/
 .ruff_cache/
 .mypy_cache/
 
+# local LLM usage database
+*.db
+apps/api/data/
+
 # searxng writes runtime files next to its settings
 infra/searxng/*
 !infra/searxng/settings.yml

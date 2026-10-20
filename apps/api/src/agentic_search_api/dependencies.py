@@ -1,5 +1,6 @@
 from collections.abc import AsyncIterator
 from typing import Annotated
+from uuid import uuid4
 
 import httpx
 from fastapi import Depends, HTTPException
@@ -7,27 +8,46 @@ from fastapi import Depends, HTTPException
 from agentic_search_api.config import Settings, get_settings
 from agentic_search_api.providers.llm import LLM, MockLLM, OpenAICompatibleLLM
 from agentic_search_api.providers.search import MockSearch, SearchProvider, SearxngSearch
+from agentic_search_api.telemetry import UsageStore, get_usage_store
 
 SettingsDep = Annotated[Settings, Depends(get_settings)]
+StoreDep = Annotated[UsageStore, Depends(get_usage_store)]
 
 
-def get_llm(settings: SettingsDep) -> LLM:
+def get_run_id() -> str:
+    return uuid4().hex
+
+
+def get_llm(settings: SettingsDep, store: StoreDep, run_id: Annotated[str, Depends(get_run_id)]) -> LLM:
     match settings.llm_provider:
         case "sarvam":
             if not settings.sarvam_api_key:
                 raise HTTPException(503, "SARVAM_API_KEY is not configured")
+            key = settings.sarvam_api_key.get_secret_value()
             return OpenAICompatibleLLM(
+                provider="sarvam",
                 base_url=settings.sarvam_base_url,
-                api_key=settings.sarvam_api_key.get_secret_value(),
+                api_key=key,
+                default_headers={"api-subscription-key": key},
                 model=settings.sarvam_model,
-                # Sarvam reasons by default; skip it for the quick JSON planning step.
+                run_id=run_id,
+                store=store,
+                max_tokens=settings.sarvam_max_tokens,
+                # Planning is a small JSON task, so skip reasoning there.
                 json_extra={"reasoning_effort": None},
-                stream_extra={"reasoning_effort": "low"},
+                stream_extra={"reasoning_effort": settings.sarvam_reasoning_effort},
             )
         case "ollama":
             if not settings.ollama_model:
                 raise HTTPException(503, "OLLAMA_MODEL is not configured")
-            return OpenAICompatibleLLM(base_url=settings.ollama_base_url, api_key="ollama", model=settings.ollama_model)
+            return OpenAICompatibleLLM(
+                provider="ollama",
+                base_url=settings.ollama_base_url,
+                api_key="ollama",
+                model=settings.ollama_model,
+                run_id=run_id,
+                store=store,
+            )
         case _:
             return MockLLM()
 
