@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Providers } from "@/components/providers";
 import { activeTheme } from "@/config/theme";
+import { accentInitScript } from "@/lib/accent";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -27,6 +28,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       data-theme={activeTheme}
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
+      <head>
+        {/* Plain inline script (not next/script) so it runs during HTML parsing, before first paint. */}
+        <script dangerouslySetInnerHTML={{ __html: accentInitScript }} />
+      </head>
       <body className="min-h-full">
         <Providers>{children}</Providers>
       </body>

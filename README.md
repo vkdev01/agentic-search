@@ -63,3 +63,4 @@ apps/web/src/
 - **Rich answer block:** add `<name>-block.tsx` in `markdown/blocks/`, register it in `registry.ts`, and describe its JSON in `prompts.py` (`FORMAT_GUIDE`).
 - **Stream event:** add the model to `schemas.py`, mirror it in `lib/types.ts`, and handle it in `lib/chat/events.ts`.
 - **Theme:** add a palette in `globals.css` and its name to `config/theme.ts`.
+- **Accent color** (header palette menu): add `[data-accent="<name>"]` light and dark blocks in `globals.css` and an entry in `ACCENTS` (`config/theme.ts`).

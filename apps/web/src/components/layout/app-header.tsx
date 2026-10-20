@@ -3,11 +3,12 @@
 import { Plus } from "lucide-react";
 import { BrandMark } from "@/components/brand/brand-mark";
 import type { Thread } from "@/lib/types";
+import { AccentPicker } from "./accent-picker";
 import { IconButton } from "./icon-button";
 import { ThemeToggle } from "./theme-toggle";
 import { ThreadMenu } from "./thread-menu";
 
-/** Top bar: logo and app name (plus the thread title once a chat starts), and the history/new chat/theme toolbar. */
+/** Top bar: logo and app name (plus the thread title once a chat starts), and the history/new chat/accent/theme toolbar. */
 export function AppHeader({
   threads,
   active,
@@ -42,6 +43,7 @@ export function AppHeader({
         <IconButton aria-label="New chat" title="New chat" onClick={onNewChat} disabled={busy || !started}>
           <Plus />
         </IconButton>
+        <AccentPicker />
         <ThemeToggle />
       </div>
     </header>

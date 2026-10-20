@@ -236,6 +236,88 @@
   --chart-5: oklch(0.75 0.12 230);
 }
 
+/* Accent colors, picked in the header (components/layout/accent-picker.tsx) and set as data-accent on <html>.
+   They come after the themes so they win at equal specificity. chart-1/chart-2 also drive the logo gradient
+   and the background glow. */
+[data-accent]:not(.dark) {
+  --primary-foreground: oklch(0.99 0 0);
+  --ring: var(--primary);
+}
+[data-accent="violet"]:not(.dark) {
+  --primary: oklch(0.55 0.22 285);
+  --accent: oklch(0.955 0.03 290);
+  --accent-foreground: oklch(0.45 0.2 285);
+  --chart-1: oklch(0.55 0.22 285);
+  --chart-2: oklch(0.68 0.13 200);
+}
+[data-accent="emerald"]:not(.dark) {
+  --primary: oklch(0.56 0.14 160);
+  --accent: oklch(0.955 0.03 160);
+  --accent-foreground: oklch(0.42 0.12 160);
+  --chart-1: oklch(0.56 0.14 160);
+  --chart-2: oklch(0.62 0.12 220);
+}
+[data-accent="amber"]:not(.dark) {
+  --primary: oklch(0.6 0.16 60);
+  --accent: oklch(0.96 0.035 75);
+  --accent-foreground: oklch(0.45 0.13 55);
+  --chart-1: oklch(0.6 0.16 60);
+  --chart-2: oklch(0.6 0.19 30);
+}
+[data-accent="rose"]:not(.dark) {
+  --primary: oklch(0.58 0.22 10);
+  --accent: oklch(0.955 0.03 10);
+  --accent-foreground: oklch(0.45 0.18 10);
+  --chart-1: oklch(0.58 0.22 10);
+  --chart-2: oklch(0.58 0.2 330);
+}
+[data-accent="sky"]:not(.dark) {
+  --primary: oklch(0.56 0.15 240);
+  --accent: oklch(0.955 0.03 240);
+  --accent-foreground: oklch(0.43 0.14 240);
+  --chart-1: oklch(0.56 0.15 240);
+  --chart-2: oklch(0.65 0.12 195);
+}
+.dark[data-accent] {
+  --primary-foreground: oklch(0.17 0.02 275);
+  --ring: var(--primary);
+}
+.dark[data-accent="violet"] {
+  --primary: oklch(0.72 0.16 285);
+  --accent: oklch(0.27 0.05 285);
+  --accent-foreground: oklch(0.88 0.07 285);
+  --chart-1: oklch(0.72 0.16 285);
+  --chart-2: oklch(0.78 0.12 200);
+}
+.dark[data-accent="emerald"] {
+  --primary: oklch(0.76 0.15 160);
+  --accent: oklch(0.27 0.045 160);
+  --accent-foreground: oklch(0.88 0.08 160);
+  --chart-1: oklch(0.76 0.15 160);
+  --chart-2: oklch(0.76 0.11 220);
+}
+.dark[data-accent="amber"] {
+  --primary: oklch(0.82 0.15 75);
+  --accent: oklch(0.28 0.045 70);
+  --accent-foreground: oklch(0.9 0.08 80);
+  --chart-1: oklch(0.82 0.15 75);
+  --chart-2: oklch(0.72 0.17 40);
+}
+.dark[data-accent="rose"] {
+  --primary: oklch(0.74 0.16 10);
+  --accent: oklch(0.28 0.05 10);
+  --accent-foreground: oklch(0.88 0.07 10);
+  --chart-1: oklch(0.74 0.16 10);
+  --chart-2: oklch(0.72 0.16 330);
+}
+.dark[data-accent="sky"] {
+  --primary: oklch(0.75 0.13 235);
+  --accent: oklch(0.27 0.045 240);
+  --accent-foreground: oklch(0.88 0.06 235);
+  --chart-1: oklch(0.75 0.13 235);
+  --chart-2: oklch(0.8 0.11 195);
+}
+
 @keyframes rise-in {
   from { opacity: 0; transform: translateY(8px); filter: blur(4px); }
   to { opacity: 1; transform: none; filter: none; }
