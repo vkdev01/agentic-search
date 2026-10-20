@@ -17,7 +17,7 @@ export function AppHeader({
 }: {
   threads: Thread[];
   active: Thread;
-  /** A request is running: the logo spins and thread switching is disabled. */
+  /** A request is running: the logo animates and thread switching is disabled. */
   busy: boolean;
   onSelectThread: (id: string) => void;
   onNewChat: () => void;
@@ -26,7 +26,7 @@ export function AppHeader({
   return (
     <header className="relative z-20 flex items-center justify-between gap-4 px-4 py-3 sm:px-6">
       <div className="flex min-w-0 items-center gap-2.5 text-sm">
-        <BrandMark spinning={busy} />
+        <BrandMark working={busy} />
         <span className="shrink-0 font-semibold tracking-tight">Agentic Search</span>
         {started && (
           <>

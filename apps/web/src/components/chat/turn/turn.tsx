@@ -27,8 +27,8 @@ export function Turn({ index, turn, onRetry }: { index: number; turn: ChatTurn; 
       </div>
       {answer && (
         <div className="relative pr-2 pl-9 sm:pr-10">
-          <BrandMark spinning={answer.status === "streaming"} className="absolute top-0.5 left-0" />
-          <span aria-hidden className="absolute top-8 bottom-0 left-[9.5px] w-px bg-linear-to-b from-border to-transparent" />
+          <BrandMark working={answer.status === "streaming"} className="absolute top-0 left-0" />
+          <span aria-hidden className="absolute top-8 bottom-0 left-[11.5px] w-px bg-linear-to-b from-border to-transparent" />
           <Answer message={answer} question={question.content} onRetry={onRetry} />
         </div>
       )}
