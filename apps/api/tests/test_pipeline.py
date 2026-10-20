@@ -15,6 +15,8 @@ SETTINGS = Settings(_env_file=None)
 class ScriptedLLM:
     model = "scripted"
     max_tokens = 4096
+    context_window: int | None = None
+    price_per_mtok: tuple[float, float] | None = None
 
     def __init__(self, queries: list[str]) -> None:
         self.queries = queries
