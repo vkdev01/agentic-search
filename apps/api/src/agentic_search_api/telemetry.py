@@ -1,3 +1,9 @@
+"""Per-call LLM telemetry (tokens, latency, errors) stored in SQLite.
+
+One row per LLM call in `llm_calls`; rows from the same request share a `run_id`.
+Browse it with `make usage` or `make metrics` (Datasette).
+"""
+
 import json
 import logging
 import sqlite3
@@ -47,6 +53,12 @@ CREATE INDEX IF NOT EXISTS idx_llm_calls_created ON llm_calls(created_at);
 
 @dataclass
 class LLMCallRecord:
+    """Everything measured about one LLM call; field names match the `llm_calls` columns.
+
+    Times are milliseconds from the request start: `ttft_ms` to the first answer token,
+    `first_reasoning_ms` to the first reasoning token. Token counts are None when the provider omits them.
+    """
+
     run_id: str
     purpose: str
     provider: str
@@ -72,6 +84,7 @@ class LLMCallRecord:
     response_meta: dict[str, Any] = field(default_factory=dict)
 
     def set_usage(self, usage: CompletionUsage) -> None:
+        """Copies token counts from the provider's usage block, keeping the raw block in `response_meta`."""
         self.prompt_tokens = usage.prompt_tokens
         self.completion_tokens = usage.completion_tokens
         self.total_tokens = usage.total_tokens
@@ -92,6 +105,7 @@ class UsageStore:
             conn.executescript(SCHEMA)
 
     def insert(self, record: LLMCallRecord) -> None:
+        """Saves one record. Failures are logged, never raised, so telemetry can't break a chat."""
         row = asdict(record)
         row["stream"] = int(record.stream)
         row["request_params"] = json.dumps(record.request_params, default=str)
@@ -107,4 +121,5 @@ class UsageStore:
 
 @lru_cache
 def get_usage_store() -> UsageStore:
+    """The process-wide store at LLM_USAGE_DB (creates the file and table on first use)."""
     return UsageStore(get_settings().llm_usage_db)

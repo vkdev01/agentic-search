@@ -1,3 +1,5 @@
+"""Chat model backends. Add one by implementing the LLM protocol and selecting it in dependencies.get_llm."""
+
 import asyncio
 import json
 import time
@@ -9,17 +11,24 @@ from openai import AsyncOpenAI
 from agentic_search_api.telemetry import LLMCallRecord, UsageStore
 
 Message = dict[str, str]
+"""An OpenAI-style chat message: `{"role": ..., "content": ...}`."""
 
 
 class LLM(Protocol):
+    """What the agent needs from a model. One instance serves one request, so `records` is per run."""
+
     model: str
     max_tokens: int | None
     records: list[LLMCallRecord]
     """Calls made during the current request, in order."""
 
-    async def complete_json(self, messages: list[Message], schema: dict[str, Any], name: str) -> dict[str, Any]: ...
+    async def complete_json(self, messages: list[Message], schema: dict[str, Any], name: str) -> dict[str, Any]:
+        """One non-streaming call whose reply must match the JSON `schema`; `name` labels the call."""
+        ...
 
-    def stream(self, messages: list[Message], purpose: str = "answer") -> AsyncIterator[str]: ...
+    def stream(self, messages: list[Message], purpose: str = "answer") -> AsyncIterator[str]:
+        """Streams the reply's visible text (reasoning is counted but not yielded)."""
+        ...
 
 
 def _elapsed_ms(start: float) -> float:
@@ -32,7 +41,11 @@ def _reasoning_text(obj: Any) -> str:
 
 
 class OpenAICompatibleLLM:
-    """Any OpenAI-compatible chat API (Sarvam, Ollama, vLLM, ...). Every call is recorded in `store`."""
+    """Any OpenAI-compatible chat API (Sarvam, Ollama, vLLM, ...). Every call is recorded in `store`.
+
+    `json_extra` / `stream_extra` are passed as extra request fields to the planning and answer calls
+    respectively (e.g. Sarvam's `reasoning_effort`). `http_client` lets tests inject a mock transport.
+    """
 
     def __init__(
         self,

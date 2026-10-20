@@ -1,3 +1,5 @@
+"""All runtime settings, read from environment variables or apps/api/.env (see .env.example)."""
+
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
@@ -7,6 +9,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    """Field names map to upper-case env vars, e.g. `llm_provider` <- LLM_PROVIDER. Empty values are ignored."""
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore", env_ignore_empty=True)
 
     llm_provider: Literal["mock", "sarvam", "ollama"] = "mock"
@@ -22,6 +26,7 @@ class Settings(BaseSettings):
     search_provider: Literal["mock", "searxng"] = "mock"
     searxng_url: str = "http://localhost:8080"
 
+    # Research breadth per question: queries planned, hits kept per query, sources given to the model.
     max_sub_queries: int = 4
     results_per_query: int = 5
     max_sources: int = 10
@@ -38,4 +43,5 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
+    """Settings are read once per process; tests override this dependency instead."""
     return Settings()

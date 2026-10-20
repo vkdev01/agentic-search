@@ -1,3 +1,9 @@
+"""FastAPI dependencies that build per-request services from Settings.
+
+This is the one place providers are chosen: to add an LLM or search backend, implement the protocol
+in providers/ and add a branch to get_llm or get_search (plus its option in config.Settings).
+"""
+
 from collections.abc import AsyncIterator
 from typing import Annotated
 from uuid import uuid4
@@ -15,10 +21,12 @@ StoreDep = Annotated[UsageStore, Depends(get_usage_store)]
 
 
 def get_run_id() -> str:
+    """A fresh id per request; every LLM call in the run is stored under it."""
     return uuid4().hex
 
 
 def get_llm(settings: SettingsDep, store: StoreDep, run_id: Annotated[str, Depends(get_run_id)]) -> LLM:
+    """The model selected by LLM_PROVIDER; 503 if that provider isn't configured."""
     match settings.llm_provider:
         case "sarvam":
             if not settings.sarvam_api_key:
@@ -53,11 +61,13 @@ def get_llm(settings: SettingsDep, store: StoreDep, run_id: Annotated[str, Depen
 
 
 async def get_http_client() -> AsyncIterator[httpx.AsyncClient]:
+    """A per-request HTTP client for search calls, closed when the response finishes."""
     async with httpx.AsyncClient(headers={"User-Agent": "agentic-search/0.1"}) as client:
         yield client
 
 
 def get_search(settings: SettingsDep, client: Annotated[httpx.AsyncClient, Depends(get_http_client)]) -> SearchProvider:
+    """The search backend selected by SEARCH_PROVIDER."""
     if settings.search_provider == "searxng":
         return SearxngSearch(settings.searxng_url, client)
     return MockSearch()

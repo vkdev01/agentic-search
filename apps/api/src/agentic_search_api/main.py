@@ -1,3 +1,5 @@
+"""HTTP entry point: a health check and the streaming chat endpoint. Run with `make api`."""
+
 import logging
 from collections.abc import AsyncIterator
 from typing import Annotated
@@ -26,6 +28,7 @@ app.add_middleware(
 
 @app.get("/health")
 def health(settings: SettingsDep) -> dict[str, str]:
+    """Liveness plus the active providers (the web app shows them in the UI)."""
     return {"status": "ok", "llm": settings.llm_provider, "search": settings.search_provider}
 
 
@@ -36,6 +39,11 @@ async def chat(
     llm: Annotated[LLM, Depends(get_llm)],
     search: Annotated[SearchProvider, Depends(get_search)],
 ) -> AsyncIterator[ServerSentEvent]:
+    """Answers the last message in `request.messages` as a stream of server-sent events.
+
+    Each event's name is its `type` and its data is the JSON event (schemas.AgentEvent).
+    Failures mid-stream become a final `error` event with a safe message; details go to the log.
+    """
     try:
         async for event in run_agent(request.messages, llm, search, settings, web_search=request.web_search):
             yield ServerSentEvent(event=event.type, data=event)

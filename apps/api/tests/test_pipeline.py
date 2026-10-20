@@ -1,7 +1,9 @@
 from collections.abc import AsyncIterator
 from typing import Any
 
-from agentic_search_api.agent.pipeline import build_sources, plan_input, run_agent
+from agentic_search_api.agent.pipeline import run_agent
+from agentic_search_api.agent.planner import plan_input
+from agentic_search_api.agent.sources import build_sources
 from agentic_search_api.config import Settings
 from agentic_search_api.providers.llm import Message
 from agentic_search_api.schemas import ChatMessage, SearchHit, UsageEvent
