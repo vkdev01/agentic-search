@@ -2,6 +2,7 @@
 
 import { ChevronDown, Clock, Gauge, Network, RotateCcw, TriangleAlert } from "lucide-react";
 import { useMemo, useState } from "react";
+import { BrandMark } from "@/components/brand-mark";
 import { formatClock, formatDuration, useElapsedTime } from "@/lib/time";
 import type { ChatMessage, RunUsage, Source } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -181,7 +182,7 @@ function Answer({ message, question, onRetry }: { message: ChatMessage; question
   const streaming = message.status === "streaming";
   const sources = message.sources ?? [];
   return (
-    <div className="mt-4 space-y-5">
+    <div className="space-y-5">
       <ResearchTrail message={message} question={question} />
       {message.content && (
         <div>
@@ -204,7 +205,7 @@ function Answer({ message, question, onRetry }: { message: ChatMessage; question
   );
 }
 
-/** One question and its answer, drawn as a node on the conversation's thread line. */
+/** One question (right-aligned bubble tinted with the turn's color) and its answer on the left. */
 export function Turn({
   index,
   question,
@@ -216,27 +217,27 @@ export function Turn({
   answer?: ChatMessage;
   onRetry?: () => void;
 }) {
-  const long = question.length > 160;
+  const color = `var(--chart-${(index % 5) + 1})`;
   return (
-    <section id={`turn-${index}`} data-turn={index} className="group/turn animate-rise relative scroll-mt-4 pb-12 pl-7 sm:pl-9">
-      <span aria-hidden className="absolute top-5 bottom-0 left-[5px] w-px bg-linear-to-b from-border to-transparent sm:left-[7px]" />
-      <span
-        aria-hidden
-        className={cn(
-          "absolute top-2 left-0 size-[11px] rounded-full ring-4 ring-background sm:top-2.5 sm:left-0.5",
-          answer?.status === "streaming" && "animate-[node-pulse_1.6s_ease-out_infinite]",
-        )}
-        style={{ background: `var(--chart-${(index % 5) + 1})` }}
-      />
-      <h2
-        className={cn(
-          "text-pretty whitespace-pre-wrap",
-          long ? "text-base leading-7 font-medium" : "text-xl font-semibold tracking-tight sm:text-2xl",
-        )}
-      >
-        {question}
-      </h2>
-      {answer && <Answer message={answer} question={question} onRetry={onRetry} />}
+    <section id={`turn-${index}`} data-turn={index} className="group/turn animate-rise scroll-mt-4 space-y-5 pb-10">
+      <div className="flex justify-end pl-10">
+        <h2
+          className="rounded-2xl rounded-br-md border px-4 py-2.5 text-[15px] leading-relaxed font-normal text-pretty whitespace-pre-wrap"
+          style={{
+            background: `color-mix(in oklch, ${color} 11%, var(--background))`,
+            borderColor: `color-mix(in oklch, ${color} 28%, transparent)`,
+          }}
+        >
+          {question}
+        </h2>
+      </div>
+      {answer && (
+        <div className="relative pr-2 pl-9 sm:pr-10">
+          <BrandMark spinning={answer.status === "streaming"} className="absolute top-0.5 left-0" />
+          <span aria-hidden className="absolute top-8 bottom-0 left-[9.5px] w-px bg-linear-to-b from-border to-transparent" />
+          <Answer message={answer} question={question} onRetry={onRetry} />
+        </div>
+      )}
     </section>
   );
 }
