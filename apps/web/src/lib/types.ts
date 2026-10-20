@@ -76,11 +76,27 @@ export interface ChatTurn {
   answer?: ChatMessage;
 }
 
-/** Response of GET /health: which LLM and search providers the API is configured with. */
+/** Response of GET /health: the search provider the API is configured with. */
 export interface ApiInfo {
   status: string;
-  llm: string;
   search: string;
+}
+
+/** A model the user can pick (GET /api/models); mirrors ModelInfo in apps/api schemas.py. */
+export interface ModelInfo {
+  /** `<provider>/<model>`, e.g. "ollama/llama3.2:1b"; sent back in POST /api/chat. */
+  id: string;
+  label: string;
+  provider: string;
+  provider_label: string;
+  local: boolean;
+  reasoning: boolean;
+  context_window: number | null;
+}
+
+export interface ModelList {
+  default_model: string | null;
+  models: ModelInfo[];
 }
 
 /** A conversation. Threads live in memory only and are lost on reload. */
@@ -88,6 +104,8 @@ export interface Thread {
   id: string;
   title: string;
   messages: ChatMessage[];
+  /** Model id picked for this thread; unset until the user picks one or sends a message. */
+  model?: string;
 }
 
 /** Server-sent events from POST /api/chat, in the order the agent emits them. */
