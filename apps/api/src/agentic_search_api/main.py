@@ -37,7 +37,7 @@ async def chat(
     search: Annotated[SearchProvider, Depends(get_search)],
 ) -> AsyncIterator[ServerSentEvent]:
     try:
-        async for event in run_agent(request.messages, llm, search, settings):
+        async for event in run_agent(request.messages, llm, search, settings, web_search=request.web_search):
             yield ServerSentEvent(event=event.type, data=event)
     except Exception:
         log.exception("Agent run failed")

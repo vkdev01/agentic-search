@@ -1,12 +1,16 @@
 import json
+from collections.abc import Iterator
+from pathlib import Path
 
 import httpx
 import pytest
 import respx
 from fastapi.testclient import TestClient
 
+from agentic_search_api.config import Settings, get_settings
 from agentic_search_api.main import app
 from agentic_search_api.providers.search import SearxngSearch
+from agentic_search_api.telemetry import UsageStore, get_usage_store
 
 
 def parse_sse(body: str) -> list[tuple[str, dict]]:
@@ -19,8 +23,14 @@ def parse_sse(body: str) -> list[tuple[str, dict]]:
 
 
 @pytest.fixture
-def client() -> TestClient:
-    return TestClient(app)
+def client(tmp_path: Path) -> Iterator[TestClient]:
+    # Ignore the local .env so tests never call real LLM/search services.
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        _env_file=None, llm_provider="mock", search_provider="mock"
+    )
+    app.dependency_overrides[get_usage_store] = lambda: UsageStore(tmp_path / "usage.db")
+    yield TestClient(app)
+    app.dependency_overrides.clear()
 
 
 def test_health(client: TestClient) -> None:
@@ -47,6 +57,33 @@ def test_chat_streams_full_pipeline_with_mocks(client: TestClient) -> None:
 
 def test_chat_rejects_empty_messages(client: TestClient) -> None:
     assert client.post("/api/chat", json={"messages": []}).status_code == 422
+
+
+def test_follow_up_after_long_answer_is_accepted(client: TestClient) -> None:
+    messages = [
+        {"role": "user", "content": "compare models"},
+        {"role": "assistant", "content": "x" * 10_000},
+        {"role": "user", "content": "summarize that in a table"},
+    ]
+    response = client.post("/api/chat", json={"messages": messages, "web_search": False})
+    assert response.status_code == 200
+
+
+@pytest.mark.parametrize(
+    "messages",
+    [
+        [{"role": "user", "content": "q" * 4001}],
+        [{"role": "user", "content": "hi"}, {"role": "assistant", "content": "hello"}],
+    ],
+)
+def test_chat_rejects_invalid_question(client: TestClient, messages: list[dict]) -> None:
+    assert client.post("/api/chat", json={"messages": messages}).status_code == 422
+
+
+def test_chat_without_web_search_skips_planning_and_search(client: TestClient) -> None:
+    response = client.post("/api/chat", json={"messages": [{"role": "user", "content": "hello"}], "web_search": False})
+    types = [name for name, _ in parse_sse(response.text)]
+    assert set(types) == {"token", "done"} and types[-1] == "done"
 
 
 @respx.mock
