@@ -5,14 +5,23 @@ such as Ollama, LM Studio and vLLM.
 
 import asyncio
 import json
+import re
 import time
 from collections.abc import AsyncIterator
 from typing import Any, Self
 
-from openai import AsyncOpenAI
+from openai import APIConnectionError, APIStatusError, AsyncOpenAI
 
 from agentic_search_api.providers.llm.base import Message, ModelSpec
 from agentic_search_api.telemetry import LLMCallRecord, UsageStore
+
+# Statuses a server returns when it rejects `response_format` (vs auth, rate limit or outage errors).
+_UNSUPPORTED_REQUEST_STATUSES = {400, 404, 422, 501}
+# Worth retrying with the SDK's backoff, along with other 5xx.
+_TRANSIENT_STATUSES = {408, 409, 429}
+
+_prompt_json_models: set[tuple[str, str]] = set()
+"""(base_url, model) pairs known to reject structured output; they go straight to prompt-based JSON."""
 
 
 def _elapsed_ms(start: float) -> float:
@@ -22,6 +31,21 @@ def _elapsed_ms(start: float) -> float:
 def _reasoning_text(obj: Any) -> str:
     # Servers differ: Sarvam streams `reasoning`, others use `reasoning_content`.
     return getattr(obj, "reasoning_content", None) or getattr(obj, "reasoning", None) or ""
+
+
+def parse_json_object(text: str) -> dict[str, Any]:
+    """The JSON object in a model reply, tolerating code fences or prose around it."""
+    text = re.sub(r"^\s*```(?:json)?\s*|\s*```\s*$", "", text.strip())
+    try:
+        value = json.loads(text or "{}")
+    except json.JSONDecodeError:
+        start, end = text.find("{"), text.rfind("}")
+        if start == -1 or end <= start:
+            raise
+        value = json.loads(text[start : end + 1])
+    if not isinstance(value, dict):
+        raise ValueError("Expected a JSON object")
+    return value
 
 
 class OpenAICompatibleLLM:
@@ -105,17 +129,52 @@ class OpenAICompatibleLLM:
             self._store.insert(record)
 
     async def complete_json(self, messages: list[Message], schema: dict[str, Any], name: str) -> dict[str, Any]:
+        """Asks for strict structured output; if the server rejects that (some local runtimes can't do it),
+        retries with the schema in the prompt and parses the reply leniently. Each attempt is recorded.
+        """
+        key = (str(self._client.base_url), self.model)
+        if key not in _prompt_json_models:
+            try:
+                # No SDK retries here: they would repeat a 501 "unsupported" pointlessly before the fallback.
+                fail_fast = self._client.with_options(max_retries=0)
+                return await self._json_call(messages, name, schema=schema, client=fail_fast)
+            except APIStatusError as exc:
+                if exc.status_code in _UNSUPPORTED_REQUEST_STATUSES:
+                    _prompt_json_models.add(key)
+                elif exc.status_code in _TRANSIENT_STATUSES or exc.status_code >= 500:
+                    return await self._json_call(messages, name, schema=schema)
+                else:
+                    raise
+            except APIConnectionError:
+                return await self._json_call(messages, name, schema=schema)
+        instruction = (
+            f"\n\nReply with only a JSON object (no prose, no code fences) matching this schema:\n{json.dumps(schema)}"
+        )
+        prompted = [*messages[:-1], {**messages[-1], "content": messages[-1]["content"] + instruction}]
+        return await self._json_call(prompted, name, schema=None)
+
+    async def _json_call(
+        self, messages: list[Message], name: str, schema: dict[str, Any] | None, client: AsyncOpenAI | None = None
+    ) -> dict[str, Any]:
+        """One recorded non-streaming call; `schema` set means structured output, None means prompt-only JSON."""
         params: dict[str, Any] = {"temperature": 0.2, **self._limits(), **self._json_extra}
-        record = self._new_record(name, stream=False, messages=messages, params={**params, "response_format": name})
+        mode = "json_schema" if schema is not None else "prompt"
+        record = self._new_record(name, stream=False, messages=messages, params={**params, "response_format": mode})
         start = time.perf_counter()
         try:
-            response = await self._client.chat.completions.create(
+            response = await (client or self._client).chat.completions.create(
                 model=self.model,
                 messages=messages,  # type: ignore[arg-type]
-                response_format={
-                    "type": "json_schema",
-                    "json_schema": {"name": name, "schema": schema, "strict": True},
-                },
+                **(
+                    {
+                        "response_format": {
+                            "type": "json_schema",
+                            "json_schema": {"name": name, "schema": schema, "strict": True},
+                        }
+                    }
+                    if schema is not None
+                    else {}
+                ),
                 temperature=params["temperature"],
                 extra_body={**self._limits(), **self._json_extra},
             )
@@ -131,7 +190,7 @@ class OpenAICompatibleLLM:
             )
             if response.usage:
                 record.set_usage(response.usage)
-            return json.loads(content or "{}")
+            return parse_json_object(content)
         except Exception as exc:
             record.status, record.error = "error", repr(exc)[:500]
             raise

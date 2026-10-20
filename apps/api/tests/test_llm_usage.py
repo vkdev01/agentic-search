@@ -1,13 +1,14 @@
 import json
 import sqlite3
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from pathlib import Path
 
 import httpx
 import openai
 import pytest
 
-from agentic_search_api.providers.llm.openai_compatible import OpenAICompatibleLLM
+from agentic_search_api.providers.llm import openai_compatible
+from agentic_search_api.providers.llm.openai_compatible import OpenAICompatibleLLM, parse_json_object
 from agentic_search_api.telemetry import UsageStore
 
 BASE = "http://llm.test/v1"
@@ -37,6 +38,13 @@ def chunk(delta: dict, finish_reason: str | None = None) -> dict:
 @pytest.fixture
 def store(tmp_path: Path) -> UsageStore:
     return UsageStore(tmp_path / "usage.db")
+
+
+@pytest.fixture(autouse=True)
+def forget_prompt_json_models() -> Iterator[None]:
+    openai_compatible._prompt_json_models.clear()
+    yield
+    openai_compatible._prompt_json_models.clear()
 
 
 def rows(store: UsageStore) -> list[sqlite3.Row]:
@@ -136,10 +144,59 @@ async def test_json_call_records_usage(store: UsageStore) -> None:
 
 
 async def test_failed_call_is_recorded_as_error(store: UsageStore) -> None:
-    llm = make_llm(store, lambda request: httpx.Response(422, json={"error": {"message": "bad"}}))
+    llm = make_llm(store, lambda request: httpx.Response(401, json={"error": {"message": "bad key"}}))
 
     with pytest.raises(openai.APIStatusError):
         await llm.complete_json([{"role": "user", "content": "q"}], {"type": "object"}, "search_plan")
 
     [row] = rows(store)
-    assert row["status"] == "error" and "422" in row["error"]
+    assert row["status"] == "error" and "401" in row["error"]
+
+
+def completion(content: str) -> dict:
+    return {
+        "id": "resp-3",
+        "object": "chat.completion",
+        "created": 1,
+        "model": "local",
+        "choices": [{"index": 0, "finish_reason": "stop", "message": {"role": "assistant", "content": content}}],
+    }
+
+
+async def test_json_falls_back_to_prompt_when_structured_output_is_unsupported(store: UsageStore) -> None:
+    bodies: list[dict] = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        bodies.append(body)
+        if "response_format" in body:
+            return httpx.Response(501, json={"error": {"message": "structured output is unavailable"}})
+        return httpx.Response(200, json=completion('Sure:\n```json\n{"queries": ["a"]}\n```'))
+
+    llm = make_llm(store, respond)
+    messages = [{"role": "user", "content": "plan this"}]
+    first = await llm.complete_json(messages, {"type": "object"}, "search_plan")
+    second = await llm.complete_json(messages, {"type": "object"}, "search_plan")
+
+    assert first == second == {"queries": ["a"]}
+    # The model is remembered: the second call skips the rejected structured-output attempt.
+    assert ["response_format" in b for b in bodies] == [True, False, False]
+    assert "matching this schema" in bodies[1]["messages"][-1]["content"]
+    assert [(r["status"], json.loads(r["request_params"])["response_format"]) for r in rows(store)] == [
+        ("error", "json_schema"),
+        ("ok", "prompt"),
+        ("ok", "prompt"),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ('{"a": 1}', {"a": 1}),
+        ('```json\n{"a": 1}\n```', {"a": 1}),
+        ('Here you go: {"a": [1, 2]} hope that helps', {"a": [1, 2]}),
+        ("", {}),
+    ],
+)
+def test_parse_json_object_tolerates_fences_and_prose(text: str, expected: dict) -> None:
+    assert parse_json_object(text) == expected
