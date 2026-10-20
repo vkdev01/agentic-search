@@ -3,8 +3,7 @@
 import { ArrowUp, Square } from "lucide-react";
 import { useState } from "react";
 import { Textarea } from "@/components/ui/textarea";
-import type { ApiInfo, ChatMessage, ModelInfo } from "@/lib/types";
-import { ModelPicker } from "./model-picker";
+import type { ApiInfo, ChatMessage } from "@/lib/types";
 import { SessionUsage } from "./session-usage";
 import { WebSearchToggle } from "./web-search-toggle";
 
@@ -12,19 +11,16 @@ import { WebSearchToggle } from "./web-search-toggle";
 const MAX_QUESTION_CHARS = 4000;
 
 /**
- * The question input: auto-growing textarea (Enter sends, Shift+Enter adds a line), model picker, web search
- * toggle, session usage meter and Send/Stop. Its border lights up in the theme gradient while focused.
+ * The question input: auto-growing textarea (Enter sends, Shift+Enter adds a line), web search toggle,
+ * session usage meter and Send/Stop. Its border lights up in the theme gradient while focused.
  */
 export function Composer({
   busy,
   webSearch,
   apiInfo,
-  models,
-  model,
   messages,
   autoFocus = false,
   onToggleWebSearch,
-  onSelectModel,
   onSend,
   onStop,
 }: {
@@ -32,14 +28,10 @@ export function Composer({
   busy: boolean;
   webSearch: boolean;
   apiInfo: ApiInfo | null;
-  models: ModelInfo[];
-  /** Selected model id for the active thread. */
-  model: string | null;
   /** The active thread's messages, for the usage meter. */
   messages: ChatMessage[];
   autoFocus?: boolean;
   onToggleWebSearch: () => void;
-  onSelectModel: (id: string) => void;
   onSend: (text: string) => void;
   onStop: () => void;
 }) {
@@ -80,8 +72,7 @@ export function Composer({
           rows={1}
           className="max-h-48 min-h-14 resize-none border-0 bg-transparent px-5 pt-4 text-[15px] shadow-none placeholder:text-muted-foreground/70 focus-visible:ring-0 dark:bg-transparent"
         />
-        <div className="flex items-center gap-1 px-2.5 pb-2.5">
-          <ModelPicker models={models} value={model} disabled={busy} onChange={onSelectModel} />
+        <div className="flex items-center gap-1.5 px-2.5 pb-2.5">
           <WebSearchToggle on={webSearch} searchProvider={apiInfo?.search} onToggle={onToggleWebSearch} />
           <div className="ml-auto flex items-center gap-1">
             {messages.length > 0 && <SessionUsage messages={messages} />}

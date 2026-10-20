@@ -3,7 +3,7 @@
  */
 
 import { trimHistory } from "@/lib/chat/history";
-import type { AgentEvent, ApiInfo, ChatMessage, ModelList } from "@/lib/types";
+import type { AgentEvent, ApiInfo, ChatMessage } from "@/lib/types";
 import { readEventData } from "./sse";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -23,24 +23,11 @@ async function errorMessage(response: Response): Promise<string> {
   return `Request failed (${response.status})`;
 }
 
-/** GET /health: liveness and the search provider. */
+/** GET /health: which LLM and search providers the API is running with. */
 export async function fetchApiInfo(signal?: AbortSignal): Promise<ApiInfo> {
   const response = await fetch(`${API_URL}/health`, { signal });
   if (!response.ok) throw new Error(`Health check failed (${response.status})`);
   return (await response.json()) as ApiInfo;
-}
-
-/** GET /api/models: the models the user can pick and the server's default. */
-export async function fetchModels(signal?: AbortSignal): Promise<ModelList> {
-  const response = await fetch(`${API_URL}/api/models`, { signal });
-  if (!response.ok) throw new Error(`Model list failed (${response.status})`);
-  return (await response.json()) as ModelList;
-}
-
-export interface ChatOptions {
-  webSearch: boolean;
-  /** Model id from fetchModels; omitted to use the server's default. */
-  model?: string;
 }
 
 /**
@@ -50,14 +37,14 @@ export interface ChatOptions {
  */
 export async function streamChat(
   messages: Pick<ChatMessage, "role" | "content">[],
-  { webSearch, model }: ChatOptions,
+  webSearch: boolean,
   onEvent: (event: AgentEvent) => void,
   signal: AbortSignal,
 ): Promise<void> {
   const response = await fetch(`${API_URL}/api/chat`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ messages: trimHistory(messages), web_search: webSearch, model }),
+    body: JSON.stringify({ messages: trimHistory(messages), web_search: webSearch }),
     signal,
   });
   if (!response.ok || !response.body) {

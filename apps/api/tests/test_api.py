@@ -24,9 +24,9 @@ def parse_sse(body: str) -> list[tuple[str, dict]]:
 
 @pytest.fixture
 def client(tmp_path: Path) -> Iterator[TestClient]:
-    # Ignore the local .env and models.yaml so tests never call real LLM/search services: only the mock model exists.
+    # Ignore the local .env so tests never call real LLM/search services.
     app.dependency_overrides[get_settings] = lambda: Settings(
-        _env_file=None, models_file=tmp_path / "no-models.yaml", search_provider="mock"
+        _env_file=None, llm_provider="mock", search_provider="mock"
     )
     app.dependency_overrides[get_usage_store] = lambda: UsageStore(tmp_path / "usage.db")
     yield TestClient(app)
@@ -37,19 +37,6 @@ def test_health(client: TestClient) -> None:
     response = client.get("/health")
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
-
-
-def test_models_lists_mock_as_default(client: TestClient) -> None:
-    body = client.get("/api/models").json()
-    assert body["default_model"] == "mock"
-    assert [m["id"] for m in body["models"]] == ["mock"]
-    assert "api_key" not in body["models"][0] and "base_url" not in body["models"][0]
-
-
-def test_chat_with_unknown_model_is_rejected_before_streaming(client: TestClient) -> None:
-    response = client.post("/api/chat", json={"messages": [{"role": "user", "content": "hi"}], "model": "nope/missing"})
-    assert response.status_code == 400
-    assert "not available" in response.json()["detail"]
 
 
 def test_chat_streams_full_pipeline_with_mocks(client: TestClient) -> None:

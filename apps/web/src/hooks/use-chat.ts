@@ -15,40 +15,28 @@ const newThread = (id: string = crypto.randomUUID()): Thread => ({ id, title: "N
 
 /**
  * Conversation state for the chat screen: in-memory threads, the active thread and its turns,
- * the web search toggle, the model per thread, and sending/stopping requests.
- * Only one request runs at a time (`busy`).
- *
- * The active model is the thread's own pick, else the last model used in any thread, else `defaultModel`
- * (the server's default); a thread remembers its model from its first message on.
+ * the web search toggle, and sending/stopping requests. Only one request runs at a time (`busy`).
  */
-export function useChat(defaultModel: string | null) {
+export function useChat() {
   const [threads, setThreads] = useState<Thread[]>(() => [newThread(INITIAL_THREAD_ID)]);
   const [activeId, setActiveId] = useState(INITIAL_THREAD_ID);
   const [busy, setBusy] = useState(false);
   const [webSearch, setWebSearch] = useState(true);
-  const [lastModel, setLastModel] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   const active = threads.find((t) => t.id === activeId) ?? threads[0];
   const turns = useMemo(() => toTurns(active.messages), [active.messages]);
-  const model = active.model ?? lastModel ?? defaultModel;
-
-  const updateThread = (threadId: string, update: (t: Thread) => Thread) =>
-    setThreads((prev) => prev.map((t) => (t.id === threadId ? update(t) : t)));
 
   const updateMessage = (threadId: string, messageId: string, update: (m: ChatMessage) => ChatMessage) =>
-    updateThread(threadId, (t) => ({ ...t, messages: t.messages.map((m) => (m.id === messageId ? update(m) : m)) }));
-
-  /** Picks the model for the active thread (and as the starting model for new threads). */
-  const selectModel = (id: string) => {
-    updateThread(active.id, (t) => ({ ...t, model: id }));
-    setLastModel(id);
-  };
+    setThreads((prev) =>
+      prev.map((t) =>
+        t.id === threadId ? { ...t, messages: t.messages.map((m) => (m.id === messageId ? update(m) : m)) } : t,
+      ),
+    );
 
   /** Adds the question and an empty streaming answer to the active thread, then streams the answer in. */
   const send = async (text: string) => {
     const threadId = active.id;
-    const threadModel = model ?? undefined;
     const question: ChatMessage = { id: crypto.randomUUID(), role: "user", content: text };
     const answer: ChatMessage = {
       id: crypto.randomUUID(),
@@ -60,12 +48,17 @@ export function useChat(defaultModel: string | null) {
     };
     const history = toRequestHistory(active.messages, question);
 
-    updateThread(threadId, (t) => ({
-      ...t,
-      model: t.model ?? threadModel,
-      title: t.messages.length === 0 ? text.slice(0, TITLE_MAX_CHARS) : t.title,
-      messages: [...t.messages, question, answer],
-    }));
+    setThreads((prev) =>
+      prev.map((t) =>
+        t.id === threadId
+          ? {
+              ...t,
+              title: t.messages.length === 0 ? text.slice(0, TITLE_MAX_CHARS) : t.title,
+              messages: [...t.messages, question, answer],
+            }
+          : t,
+      ),
+    );
 
     const controller = new AbortController();
     abortRef.current = controller;
@@ -73,7 +66,7 @@ export function useChat(defaultModel: string | null) {
     try {
       await streamChat(
         history,
-        { webSearch, model: threadModel },
+        webSearch,
         (event) => updateMessage(threadId, answer.id, (m) => applyEvent(m, event)),
         controller.signal,
       );
@@ -115,8 +108,6 @@ export function useChat(defaultModel: string | null) {
     turns,
     busy,
     webSearch,
-    model,
-    selectModel,
     toggleWebSearch: () => setWebSearch((on) => !on),
     send,
     stop,

@@ -7,7 +7,7 @@ import httpx
 import openai
 import pytest
 
-from agentic_search_api.providers.llm.openai_compatible import OpenAICompatibleLLM
+from agentic_search_api.providers.llm import OpenAICompatibleLLM
 from agentic_search_api.telemetry import UsageStore
 
 BASE = "http://llm.test/v1"
@@ -92,7 +92,6 @@ async def test_stream_records_usage_latency_and_skips_reasoning_text(store: Usag
     assert request.headers["api-subscription-key"] == "test-key"
     body = json.loads(request.content)
     assert body["stream"] is True and body["reasoning_effort"] == "low" and body["max_tokens"] == 1024
-    assert body["stream_options"] == {"include_usage": True}
 
     [row] = rows(store)
     assert (row["run_id"], row["purpose"], row["status"], row["finish_reason"]) == ("run-1", "answer", "ok", "stop")

@@ -5,7 +5,6 @@ import { AppHeader } from "@/components/layout/app-header";
 import { CanvasBackdrop } from "@/components/layout/canvas-backdrop";
 import { useApiInfo } from "@/hooks/use-api-info";
 import { useChat } from "@/hooks/use-chat";
-import { useModels } from "@/hooks/use-models";
 import { cn } from "@/lib/utils";
 import { Composer } from "./composer/composer";
 import { Conversation } from "./conversation";
@@ -18,8 +17,7 @@ import { WelcomeScreen } from "./welcome-screen";
  * Conversation scrolls above a composer docked at the bottom.
  */
 export function ChatApp() {
-  const { models, default_model } = useModels();
-  const chat = useChat(default_model);
+  const chat = useChat();
   const apiInfo = useApiInfo();
   const scrollRef = useRef<HTMLDivElement>(null);
   const started = chat.turns.length > 0;
@@ -29,12 +27,9 @@ export function ChatApp() {
       busy={chat.busy}
       webSearch={chat.webSearch}
       apiInfo={apiInfo}
-      models={models}
-      model={chat.model}
       messages={chat.active.messages}
       autoFocus={autoFocus}
       onToggleWebSearch={chat.toggleWebSearch}
-      onSelectModel={chat.selectModel}
       onSend={chat.send}
       onStop={chat.stop}
     />
@@ -73,7 +68,7 @@ export function ChatApp() {
             <div className="mx-auto max-w-3xl">
               {composer(false)}
               <p className="mt-2 text-center text-[11px] text-muted-foreground">
-                Shift+Enter for a new line · Answers can be wrong, so check the sources
+                {apiInfo && `${apiInfo.llm} · `}Shift+Enter for a new line · Answers can be wrong, so check the sources
               </p>
             </div>
           </div>

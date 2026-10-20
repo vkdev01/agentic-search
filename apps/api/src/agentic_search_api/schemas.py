@@ -25,8 +25,6 @@ class ChatRequest(BaseModel):
 
     messages: Annotated[list[ChatMessage], Field(min_length=1, max_length=40)]
     web_search: bool = True
-    model: Annotated[str | None, Field(max_length=200)] = None
-    """A model id from GET /api/models; None uses the default model."""
 
     @model_validator(mode="after")
     def check_question(self) -> Self:
@@ -36,28 +34,6 @@ class ChatRequest(BaseModel):
         if len(question.content) > MAX_QUESTION_CHARS:
             raise ValueError(f"Question is too long (max {MAX_QUESTION_CHARS} characters)")
         return self
-
-
-# --- Models ---
-
-
-class ModelInfo(BaseModel):
-    """A selectable model as shown in the UI (no URLs or keys)."""
-
-    id: str
-    label: str
-    provider: str
-    provider_label: str
-    local: bool = False
-    reasoning: bool = False
-    context_window: int | None = None
-
-
-class ModelList(BaseModel):
-    """GET /api/models: what the model picker offers."""
-
-    default_model: str | None
-    models: list[ModelInfo]
 
 
 # --- Search ---

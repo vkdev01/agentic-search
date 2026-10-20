@@ -26,8 +26,7 @@ def context_breakdown(messages: list[Message], sources_chars: int, prompt_tokens
 def usage_event(llm: LLM, settings: Settings, messages: list[Message], sources_chars: int) -> UsageEvent:
     """Summarizes every LLM call in this run; context use is measured on the final (answer) call.
 
-    The context window and prices come from the model (models.yaml), falling back to Settings.
-    `cost` is filled only when both prices are known.
+    `cost` is filled only when both prices are configured.
     """
     calls = [
         CallUsage(
@@ -45,17 +44,14 @@ def usage_event(llm: LLM, settings: Settings, messages: list[Message], sources_c
     context_tokens = final.prompt_tokens if final and final.prompt_tokens is not None else 0
 
     cost = None
-    prices = llm.price_per_mtok
-    if prices is None and settings.price_input_per_mtok is not None and settings.price_output_per_mtok is not None:
-        prices = (settings.price_input_per_mtok, settings.price_output_per_mtok)
-    if prices is not None:
+    if settings.price_input_per_mtok is not None and settings.price_output_per_mtok is not None:
         prompt = sum(c.prompt_tokens or 0 for c in calls)
         completion = sum(c.completion_tokens or 0 for c in calls)
-        cost = (prompt * prices[0] + completion * prices[1]) / 1_000_000
+        cost = (prompt * settings.price_input_per_mtok + completion * settings.price_output_per_mtok) / 1_000_000
 
     return UsageEvent(
         model=llm.model,
-        context_window=llm.context_window or settings.context_window_tokens,
+        context_window=settings.context_window_tokens,
         context_tokens=context_tokens,
         reserved_output_tokens=llm.max_tokens,
         breakdown=context_breakdown(messages, sources_chars, context_tokens),
