@@ -1,25 +1,12 @@
 "use client";
 
-import { createContext, useContext } from "react";
 import { Globe } from "lucide-react";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
-import type { Source } from "@/lib/types";
+import { CITATION_PATTERN, parseCitationIds } from "@/lib/chat/citations";
+import { hostname } from "@/lib/format";
+import { useMarkdownContext } from "./context";
 
-export const MarkdownContext = createContext<{ sources: Source[]; streaming: boolean }>({
-  sources: [],
-  streaming: false,
-});
-
-export const useMarkdownContext = () => useContext(MarkdownContext);
-
-export function hostname(url: string) {
-  try {
-    return new URL(url).hostname.replace(/^www\./, "");
-  } catch {
-    return url;
-  }
-}
-
+/** Numbered chip linking to source `id`, with a hover card showing its site, title and snippet. */
 export function Citation({ id }: { id: number }) {
   const { sources } = useMarkdownContext();
   const source = sources.find((s) => s.id === id);
@@ -48,24 +35,15 @@ export function Citation({ id }: { id: number }) {
   );
 }
 
-const CITATION = /\[(\d+(?:\s*,\s*\d+)*)\]/g;
-
-/** Plain text with [n] / [1, 2] citations rendered as hover chips (used inside UI blocks). */
+/** Plain text with [n] / [1, 2] citations rendered as chips; for text fields inside UI blocks. */
 export function TextWithCitations({ text }: { text: string }) {
   const parts: React.ReactNode[] = [];
   let last = 0;
-  for (const match of text.matchAll(CITATION)) {
+  for (const match of text.matchAll(CITATION_PATTERN)) {
     parts.push(text.slice(last, match.index));
-    for (const id of match[1].split(",")) parts.push(<Citation key={`${match.index}-${id}`} id={Number(id.trim())} />);
+    for (const id of parseCitationIds(match[1])) parts.push(<Citation key={`${match.index}-${id}`} id={id} />);
     last = match.index + match[0].length;
   }
   parts.push(text.slice(last));
   return <>{parts}</>;
-}
-
-/** Citation numbers referenced anywhere in the text, in order of first use. */
-export function citedIds(text: string): number[] {
-  const ids = new Set<number>();
-  for (const match of text.matchAll(CITATION)) for (const id of match[1].split(",")) ids.add(Number(id.trim()));
-  return [...ids];
 }

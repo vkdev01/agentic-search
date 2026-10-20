@@ -16,6 +16,10 @@ export function quoteMermaidLabels(code: string) {
   );
 }
 
+/**
+ * Renders a Mermaid diagram (loaded on demand) once streaming ends, re-rendering when the color mode changes.
+ * Tries the code as written, then with labels quoted; if both fail it shows the source instead.
+ */
 export function MermaidBlock({ code, streaming }: { code: string; streaming: boolean }) {
   const { resolvedTheme } = useTheme();
   const id = `mermaid-${useId().replace(/[^a-zA-Z0-9]/g, "")}`;

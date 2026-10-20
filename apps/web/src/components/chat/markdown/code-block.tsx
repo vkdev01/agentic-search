@@ -1,27 +1,14 @@
 "use client";
 
-import { Check, Copy } from "lucide-react";
 import { useEffect, useState } from "react";
+import { CopyButton } from "./copy-button";
 
-export function CopyButton({ text, label = "Copy" }: { text: string | (() => string); label?: string }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <button
-      type="button"
-      onClick={async () => {
-        await navigator.clipboard.writeText(typeof text === "function" ? text() : text);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1500);
-      }}
-      className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
-    >
-      {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
-      {copied ? "Copied" : label}
-    </button>
-  );
-}
+const SHIKI_OPTIONS = { themes: { light: "github-light", dark: "github-dark-dimmed" }, defaultColor: false } as const;
 
-/** Shiki-highlighted code; skips highlighting while the message is still streaming. */
+/**
+ * Fenced code with a language label and Copy button. Highlighted with Shiki (loaded on demand) once
+ * streaming ends; unknown languages fall back to plain text. Light/dark colors are switched in globals.css.
+ */
 export function CodeBlock({ code, lang, streaming }: { code: string; lang: string; streaming: boolean }) {
   const [html, setHtml] = useState<{ key: string; value: string } | null>(null);
   const key = `${lang}\n${code}`;
@@ -29,10 +16,11 @@ export function CodeBlock({ code, lang, streaming }: { code: string; lang: strin
   useEffect(() => {
     if (streaming) return;
     let cancelled = false;
-    const options = { themes: { light: "github-light", dark: "github-dark-dimmed" }, defaultColor: false } as const;
     import("shiki")
       .then(({ codeToHtml }) =>
-        codeToHtml(code, { ...options, lang: lang || "text" }).catch(() => codeToHtml(code, { ...options, lang: "text" })),
+        codeToHtml(code, { ...SHIKI_OPTIONS, lang: lang || "text" }).catch(() =>
+          codeToHtml(code, { ...SHIKI_OPTIONS, lang: "text" }),
+        ),
       )
       .then((value) => {
         if (!cancelled) setHtml({ key, value });

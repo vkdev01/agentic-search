@@ -1,14 +1,19 @@
 "use client";
 
-import { ArrowUp, Globe, Square } from "lucide-react";
+import { ArrowUp, Square } from "lucide-react";
 import { useState } from "react";
 import { Textarea } from "@/components/ui/textarea";
 import type { ApiInfo, ChatMessage } from "@/lib/types";
-import { cn } from "@/lib/utils";
 import { SessionUsage } from "./session-usage";
+import { WebSearchToggle } from "./web-search-toggle";
 
-const SEARCH_LABEL: Record<string, string> = { searxng: "SearXNG", mock: "mock results" };
+/** Must match MAX_QUESTION_CHARS in apps/api/src/agentic_search_api/schemas.py. */
+const MAX_QUESTION_CHARS = 4000;
 
+/**
+ * The question input: auto-growing textarea (Enter sends, Shift+Enter adds a line), web search toggle,
+ * session usage meter and Send/Stop. Its border lights up in the theme gradient while focused.
+ */
 export function Composer({
   busy,
   webSearch,
@@ -19,9 +24,11 @@ export function Composer({
   onSend,
   onStop,
 }: {
+  /** A request is running: Send becomes Stop and new questions are ignored. */
   busy: boolean;
   webSearch: boolean;
   apiInfo: ApiInfo | null;
+  /** The active thread's messages, for the usage meter. */
   messages: ChatMessage[];
   autoFocus?: boolean;
   onToggleWebSearch: () => void;
@@ -61,25 +68,12 @@ export function Composer({
             }
           }}
           placeholder={webSearch ? "Ask anything…" : "Ask the model directly…"}
-          maxLength={4000}
+          maxLength={MAX_QUESTION_CHARS}
           rows={1}
           className="max-h-48 min-h-14 resize-none border-0 bg-transparent px-5 pt-4 text-[15px] shadow-none placeholder:text-muted-foreground/70 focus-visible:ring-0 dark:bg-transparent"
         />
         <div className="flex items-center gap-1.5 px-2.5 pb-2.5">
-          <button
-            type="button"
-            onClick={onToggleWebSearch}
-            aria-pressed={webSearch}
-            title={webSearch ? "Web search on: the agent searches before answering" : "Web search off: model answers directly"}
-            className={cn(
-              "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors",
-              webSearch ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground",
-            )}
-          >
-            <Globe className="size-3.5" />
-            Web search
-            {webSearch && apiInfo && <span className="font-normal opacity-70">· {SEARCH_LABEL[apiInfo.search] ?? apiInfo.search}</span>}
-          </button>
+          <WebSearchToggle on={webSearch} searchProvider={apiInfo?.search} onToggle={onToggleWebSearch} />
           <div className="ml-auto flex items-center gap-1">
             {messages.length > 0 && <SessionUsage messages={messages} />}
             {busy ? (

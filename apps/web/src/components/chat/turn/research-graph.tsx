@@ -9,11 +9,12 @@ import {
   type SimulationNodeDatum,
 } from "d3-force";
 import { useMemo } from "react";
+import { hostname, truncate } from "@/lib/format";
 import type { SearchStep, Source } from "@/lib/types";
-import { hostname } from "./markdown/citation";
 
 const WIDTH = 720;
 const HEIGHT = 440;
+/** Target distance from the centre for each kind of node. */
 const RING = { question: 0, query: 90, source: 180 } as const;
 
 interface GraphNode extends SimulationNodeDatum {
@@ -29,9 +30,10 @@ interface GraphLink {
   target: string | GraphNode;
 }
 
-const truncate = (text: string, n: number) => (text.length > n ? `${text.slice(0, n - 1)}…` : text);
-
-/** Static radial force layout (d3-force): question in the centre, queries on an inner ring, sources outside. */
+/**
+ * Static radial force layout (d3-force, run to completion up front): question in the centre, queries on an
+ * inner ring, sources outside. Each source links to every query that found it.
+ */
 function layout(question: string, steps: SearchStep[], sources: Source[], cited: Set<number>) {
   const nodes: GraphNode[] = [
     { id: "q", kind: "question", label: question, fx: WIDTH / 2, fy: HEIGHT / 2 },
@@ -66,6 +68,7 @@ function layout(question: string, steps: SearchStep[], sources: Source[], cited:
   return { nodes, links: links as { source: GraphNode; target: GraphNode }[] };
 }
 
+/** SVG map of how an answer was researched: question → search queries → sources, with cited sources highlighted. */
 export function ResearchGraph({
   question,
   steps,

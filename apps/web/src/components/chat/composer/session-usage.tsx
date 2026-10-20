@@ -1,47 +1,11 @@
 "use client";
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import type { ChatMessage, RunUsage } from "@/lib/types";
+import { contextUsage, sessionTotals } from "@/lib/chat/usage";
+import { formatCompact, formatNumber, formatPct, percentOf } from "@/lib/format";
+import type { ChatMessage } from "@/lib/types";
 
-const fmt = new Intl.NumberFormat("en-US");
-const compact = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 });
-const pct = (part: number, whole: number) => (whole > 0 ? (part / whole) * 100 : 0);
-
-function formatPct(value: number) {
-  if (value === 0) return "0%";
-  if (value < 0.1) return "<0.1%";
-  return `${value.toFixed(value < 10 ? 1 : 0)}%`;
-}
-
-export interface SessionTotals {
-  latest: RunUsage | null;
-  calls: number;
-  prompt: number;
-  completion: number;
-  reasoning: number;
-  cached: number;
-  cost: number | null;
-  currency: string | null;
-}
-
-export function sessionTotals(messages: ChatMessage[]): SessionTotals {
-  const runs = messages.flatMap((m) => (m.usage ? [m.usage] : []));
-  const calls = runs.flatMap((r) => r.calls);
-  const sum = (key: "prompt_tokens" | "completion_tokens" | "reasoning_tokens" | "cached_tokens") =>
-    calls.reduce((acc, c) => acc + (c[key] ?? 0), 0);
-  const priced = runs.filter((r) => r.cost !== null);
-  return {
-    latest: runs.at(-1) ?? null,
-    calls: calls.length,
-    prompt: sum("prompt_tokens"),
-    completion: sum("completion_tokens"),
-    reasoning: sum("reasoning_tokens"),
-    cached: sum("cached_tokens"),
-    cost: priced.length ? priced.reduce((acc, r) => acc + (r.cost ?? 0), 0) : null,
-    currency: priced[0]?.currency ?? null,
-  };
-}
-
+/** Small progress ring for the trigger button; turns red above 80%. */
 function Ring({ value }: { value: number }) {
   const r = 7;
   const c = 2 * Math.PI * r;
@@ -62,6 +26,7 @@ function Ring({ value }: { value: number }) {
   );
 }
 
+/** Label/value line in the popover, with an optional muted hint after the value. */
 function Row({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
     <div className="flex items-baseline justify-between gap-4 py-0.5">
@@ -74,18 +39,15 @@ function Row({ label, value, hint }: { label: string; value: string; hint?: stri
   );
 }
 
+/**
+ * Context-window meter for the active thread. The trigger shows how full the window was on the latest request;
+ * the popover breaks that request down (input / reasoning / answer) and totals tokens and cost for the session.
+ */
 export function SessionUsage({ messages }: { messages: ChatMessage[] }) {
   const totals = sessionTotals(messages);
   const latest = totals.latest;
-  const contextWindow = latest?.context_window ?? 0;
-  const final = latest?.calls.at(-1);
-  const input = latest?.context_tokens ?? 0;
-  const reasoning = final?.reasoning_tokens ?? 0;
-  const answer = Math.max(0, (final?.completion_tokens ?? 0) - reasoning);
-  const used = input + reasoning + answer;
-  // max_tokens is a budget for reasoning + answer; show only the part this request didn't use.
-  const reservedLeft = Math.max(0, (latest?.reserved_output_tokens ?? 0) - reasoning - answer);
-  const usedPct = pct(used, contextWindow);
+  const { window: contextWindow, input, reasoning, answer, used, reservedLeft } = contextUsage(latest);
+  const usedPct = percentOf(used, contextWindow);
   const usedLabel = formatPct(usedPct);
   const segments = [
     { label: "Input", tokens: input, className: "bg-primary" },
@@ -135,28 +97,28 @@ export function SessionUsage({ messages }: { messages: ChatMessage[] }) {
                 <span className="text-xs text-muted-foreground tabular-nums">{usedLabel}</span>
               </div>
               <p className="mt-1 tabular-nums">
-                {fmt.format(used)} / {compact.format(contextWindow)} tokens
+                {formatNumber(used)} / {formatCompact(contextWindow)} tokens
               </p>
               <div className="mt-2 flex h-2 overflow-hidden rounded-full bg-muted" role="img" aria-label="Context window usage">
                 {segments.map((s) => (
-                  <div key={s.label} className={s.className} style={{ width: `${pct(s.tokens, contextWindow)}%` }} />
+                  <div key={s.label} className={s.className} style={{ width: `${percentOf(s.tokens, contextWindow)}%` }} />
                 ))}
                 <div
                   className="bg-[repeating-linear-gradient(135deg,var(--primary)_0_3px,transparent_3px_6px)] opacity-50"
-                  style={{ width: `${Math.min(pct(reservedLeft, contextWindow), 100 - usedPct)}%` }}
+                  style={{ width: `${Math.min(percentOf(reservedLeft, contextWindow), 100 - usedPct)}%` }}
                 />
               </div>
               <ul className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
                 {segments.map((s) => (
                   <li key={s.label} className="flex items-center gap-1.5 tabular-nums">
                     <span className={`inline-block size-2.5 rounded-sm ${s.className}`} />
-                    {s.label} {fmt.format(s.tokens)}
+                    {s.label} {formatNumber(s.tokens)}
                   </li>
                 ))}
                 {reservedLeft > 0 && (
                   <li className="flex items-center gap-1.5 tabular-nums">
                     <span className="inline-block size-2.5 rounded-sm bg-[repeating-linear-gradient(135deg,var(--primary)_0_2px,transparent_2px_4px)]" />
-                    Unused response budget {compact.format(reservedLeft)}
+                    Unused response budget {formatCompact(reservedLeft)}
                   </li>
                 )}
               </ul>
@@ -167,7 +129,7 @@ export function SessionUsage({ messages }: { messages: ChatMessage[] }) {
               <p className="text-xs text-muted-foreground">Input split is approximate (by characters); % of the window</p>
               <div className="mt-1.5">
                 {parts.map((p) => (
-                  <Row key={p.label} label={p.label} value={fmt.format(p.tokens)} hint={formatPct(pct(p.tokens, contextWindow))} />
+                  <Row key={p.label} label={p.label} value={formatNumber(p.tokens)} hint={formatPct(percentOf(p.tokens, contextWindow))} />
                 ))}
               </div>
             </section>
@@ -175,10 +137,10 @@ export function SessionUsage({ messages }: { messages: ChatMessage[] }) {
             <section>
               <p className="font-medium">Session totals</p>
               <div className="mt-1.5">
-                <Row label="LLM calls" value={fmt.format(totals.calls)} />
-                <Row label="Input tokens" value={fmt.format(totals.prompt)} hint={totals.cached ? `${fmt.format(totals.cached)} cached` : undefined} />
-                <Row label="Output tokens" value={fmt.format(totals.completion)} />
-                <Row label="of which reasoning" value={fmt.format(totals.reasoning)} hint={formatPct(pct(totals.reasoning, totals.completion))} />
+                <Row label="LLM calls" value={formatNumber(totals.calls)} />
+                <Row label="Input tokens" value={formatNumber(totals.prompt)} hint={totals.cached ? `${formatNumber(totals.cached)} cached` : undefined} />
+                <Row label="Output tokens" value={formatNumber(totals.completion)} />
+                <Row label="of which reasoning" value={formatNumber(totals.reasoning)} hint={formatPct(percentOf(totals.reasoning, totals.completion))} />
                 <Row label="Model" value={latest.model} />
               </div>
             </section>

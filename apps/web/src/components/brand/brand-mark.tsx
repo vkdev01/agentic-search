@@ -6,7 +6,7 @@ const SIZES = {
   lg: "size-12",
 } as const;
 
-/** App identity: a ring in the theme's chart colors; it spins while the agent is working. */
+/** App logo: a ring in the theme's chart colors, so it follows the active palette; spins while the agent works. */
 export function BrandMark({
   size = "sm",
   spinning = false,
