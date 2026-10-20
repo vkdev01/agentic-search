@@ -1,0 +1,12 @@
+use_default_settings: true
+
+server:
+  # Local development only; bound to 127.0.0.1 in docker-compose.yml.
+  secret_key: "local-dev-only-change-me"
+  limiter: false
+  image_proxy: false
+
+search:
+  formats:
+    - html
+    - json
