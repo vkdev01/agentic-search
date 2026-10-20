@@ -45,6 +45,9 @@ export interface ChatMessage {
   usage?: RunUsage;
   status?: "streaming" | "done" | "error" | "stopped";
   error?: string;
+  /** Epoch ms when the request was sent, and how long until it finished (client-side). */
+  startedAt?: number;
+  durationMs?: number;
 }
 
 export interface ApiInfo {

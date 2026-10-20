@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowUp, Globe, Square } from "lucide-react";
+import { Globe, SendHorizontal, Square } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -42,7 +42,7 @@ export function Composer({
         e.preventDefault();
         submit();
       }}
-      className="rounded-2xl border bg-card shadow-sm focus-within:ring-3 focus-within:ring-ring/30"
+      className="rounded-2xl border border-input bg-card shadow-sm transition focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/15"
     >
       <label htmlFor="composer" className="sr-only">
         Ask a question
@@ -70,23 +70,31 @@ export function Composer({
           title={webSearch ? "Web search on: the agent searches before answering" : "Web search off: model answers directly"}
           className={cn(
             "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition-colors",
-            webSearch ? "border-primary/40 bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground",
+            webSearch
+              ? "border-primary/40 bg-accent text-accent-foreground"
+              : "text-muted-foreground hover:text-foreground",
           )}
         >
           <Globe className="size-3.5" />
           Web search
           {webSearch && apiInfo && <span className="opacity-70">· {SEARCH_LABEL[apiInfo.search] ?? apiInfo.search}</span>}
         </button>
-        {apiInfo && <span className="text-xs text-muted-foreground">Model: {apiInfo.llm}</span>}
         <div className="ml-auto flex items-center gap-1">
           <SessionUsage messages={messages} />
           {busy ? (
-            <Button type="button" size="icon" onClick={onStop} aria-label="Stop" className="rounded-full">
+            <Button
+              type="button"
+              size="icon"
+              onClick={onStop}
+              aria-label="Stop"
+              title="Stop"
+              className="size-9 rounded-xl bg-foreground text-background hover:bg-foreground/85"
+            >
               <Square className="size-3.5 fill-current" />
             </Button>
           ) : (
-            <Button type="submit" size="icon" disabled={!text.trim()} aria-label="Send" className="rounded-full">
-              <ArrowUp />
+            <Button type="submit" size="icon" disabled={!text.trim()} aria-label="Send" title="Send" className="size-9 rounded-xl">
+              <SendHorizontal />
             </Button>
           )}
         </div>

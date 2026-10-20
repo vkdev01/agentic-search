@@ -3,6 +3,7 @@
 import { Moon, Plus, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useRef, useState } from "react";
+import { BrandMark } from "@/components/brand-mark";
 import { Button } from "@/components/ui/button";
 import { ApiError, applyEvent, fetchApiInfo, streamChat } from "@/lib/chat-stream";
 import type { ApiInfo, ChatMessage, Thread } from "@/lib/types";
@@ -14,7 +15,10 @@ const EXAMPLES = [
   "What changed in the latest Next.js release?",
   "Compare Sarvam-105B with other open models for Indian languages",
   "How does the Model Context Protocol work?",
+  "Compare PostgreSQL, MySQL and MongoDB for a startup backend",
 ];
+
+const SEARCH_LABEL: Record<string, string> = { searxng: "SearXNG", mock: "mock search" };
 
 const newThread = (id: string = crypto.randomUUID()): Thread => ({ id, title: "New chat", messages: [] });
 
@@ -73,6 +77,7 @@ export function ChatApp() {
       content: "",
       status: "streaming",
       webSearch,
+      startedAt: Date.now(),
     };
     const history = [...active.messages.filter((m) => m.status !== "error" && m.content), user].map(
       ({ role, content }) => ({ role, content }),
@@ -114,6 +119,8 @@ export function ChatApp() {
       }));
       if (!stopped) console.error(error);
     } finally {
+      const finishedAt = Date.now();
+      updateMessage(threadId, assistant.id, (m) => ({ ...m, durationMs: finishedAt - (m.startedAt ?? finishedAt) }));
       abortRef.current = null;
       setBusy(false);
     }
@@ -127,9 +134,13 @@ export function ChatApp() {
   };
 
   return (
-    <div className="flex h-dvh">
-      <aside className="hidden w-64 shrink-0 flex-col border-r bg-muted/30 p-3 md:flex">
-        <Button variant="outline" className="justify-start gap-2" onClick={startNewChat} disabled={busy}>
+    <div className="flex h-dvh bg-background">
+      <aside className="hidden w-64 shrink-0 flex-col border-r bg-card/60 p-3 md:flex">
+        <div className="mb-4 flex items-center gap-2.5 px-1">
+          <BrandMark />
+          <span className="text-sm font-semibold">Agentic Search</span>
+        </div>
+        <Button variant="outline" className="justify-start gap-2 bg-background shadow-sm" onClick={startNewChat} disabled={busy}>
           <Plus /> New chat
         </Button>
         <nav aria-label="Conversations" className="mt-4 flex-1 space-y-1 overflow-y-auto">
@@ -142,7 +153,7 @@ export function ChatApp() {
               aria-current={thread.id === active.id ? "page" : undefined}
               className={cn(
                 "w-full truncate rounded-md px-3 py-2 text-left text-sm text-muted-foreground hover:bg-muted hover:text-foreground disabled:pointer-events-none",
-                thread.id === active.id && "bg-muted text-foreground",
+                thread.id === active.id && "bg-accent font-medium text-accent-foreground",
               )}
             >
               {thread.title}
@@ -150,34 +161,49 @@ export function ChatApp() {
           ))}
         </nav>
         <div className="flex items-center justify-between border-t pt-3">
-          <span className="text-xs text-muted-foreground">Agentic Search</span>
+          <span className="text-xs text-muted-foreground">Theme</span>
           <ThemeToggle />
         </div>
       </aside>
 
       <main className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center justify-between border-b px-4 py-2 md:hidden">
-          <span className="text-sm font-medium">Agentic Search</span>
-          <div className="flex items-center">
-            <Button variant="ghost" size="icon" aria-label="New chat" onClick={startNewChat} disabled={busy}>
-              <Plus />
-            </Button>
-            <ThemeToggle />
+        <header className="border-b bg-background/80 backdrop-blur">
+          <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-3">
+            <div className="flex items-center gap-3">
+              <BrandMark className="md:hidden" />
+              <div>
+                <h1 className="text-sm font-semibold">{active.messages.length ? active.title : "Agentic Search"}</h1>
+                <p className="text-xs text-muted-foreground">
+                  Web research with cited answers
+                  {apiInfo && ` · ${apiInfo.llm} · ${SEARCH_LABEL[apiInfo.search] ?? apiInfo.search}`}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center md:hidden">
+              <Button variant="ghost" size="icon" aria-label="New chat" onClick={startNewChat} disabled={busy}>
+                <Plus />
+              </Button>
+              <ThemeToggle />
+            </div>
           </div>
         </header>
 
         <div className="flex-1 overflow-y-auto">
-          <div className="mx-auto w-full max-w-3xl space-y-8 px-4 py-8">
+          <div className="mx-auto w-full max-w-4xl space-y-6 px-4 py-6">
             {active.messages.length === 0 ? (
-              <div className="flex flex-col items-center gap-6 pt-[18vh] text-center">
-                <h1 className="text-3xl font-semibold tracking-tight">What do you want to research?</h1>
-                <div className="flex flex-wrap justify-center gap-2">
+              <div className="flex flex-col items-center pt-[12vh] text-center">
+                <BrandMark size="lg" className="mb-4" />
+                <h2 className="text-2xl font-semibold tracking-tight">What would you like to research?</h2>
+                <p className="mt-2 max-w-md text-sm text-muted-foreground">
+                  The agent plans web searches, reads the results and answers with citations, tables and charts.
+                </p>
+                <div className="mt-8 grid w-full max-w-2xl gap-2 sm:grid-cols-2">
                   {EXAMPLES.map((example) => (
                     <button
                       key={example}
                       type="button"
                       onClick={() => send(example)}
-                      className="rounded-full border px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
+                      className="rounded-xl border bg-card px-4 py-3 text-left text-sm text-foreground/80 shadow-sm transition hover:border-primary/40 hover:text-accent-foreground hover:shadow"
                     >
                       {example}
                     </button>
@@ -185,29 +211,37 @@ export function ChatApp() {
                 </div>
               </div>
             ) : (
-              active.messages.map((message, i) => (
-                <MessageView
-                  key={message.id}
-                  message={message}
-                  question={active.messages[i - 1]?.role === "user" ? active.messages[i - 1].content : ""}
-                />
-              ))
+              active.messages.map((message, i) => {
+                const question = active.messages[i - 1]?.role === "user" ? active.messages[i - 1].content : "";
+                return (
+                  <MessageView
+                    key={message.id}
+                    message={message}
+                    question={question}
+                    onRetry={!busy && question ? () => send(question) : undefined}
+                  />
+                );
+              })
             )}
             <div ref={bottomRef} />
           </div>
         </div>
 
-        <div className="mx-auto w-full max-w-3xl px-4 pb-4">
-          <Composer
-            busy={busy}
-            webSearch={webSearch}
-            apiInfo={apiInfo}
-            messages={active.messages}
-            onToggleWebSearch={() => setWebSearch((on) => !on)}
-            onSend={send}
-            onStop={() => abortRef.current?.abort()}
-          />
-          <p className="mt-2 text-center text-xs text-muted-foreground">Answers are generated from web results and can be wrong. Check the sources.</p>
+        <div className="border-t bg-background/60 backdrop-blur">
+          <div className="mx-auto w-full max-w-4xl px-4 py-3">
+            <Composer
+              busy={busy}
+              webSearch={webSearch}
+              apiInfo={apiInfo}
+              messages={active.messages}
+              onToggleWebSearch={() => setWebSearch((on) => !on)}
+              onSend={send}
+              onStop={() => abortRef.current?.abort()}
+            />
+            <p className="mt-1.5 text-center text-[11px] text-muted-foreground">
+              Enter to send · Shift+Enter for a new line · Answers can be wrong, so check the sources
+            </p>
+          </div>
         </div>
       </main>
     </div>

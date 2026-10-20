@@ -117,6 +117,86 @@
   --sidebar-ring: oklch(0.556 0 0);
 }
 
+/* Color themes, picked with NEXT_PUBLIC_THEME (see src/config/theme.ts); "neutral" keeps the defaults above.
+   Light and dark variants are scoped separately so light values never leak into dark mode. */
+[data-theme="ocean"]:not(.dark) {
+  --background: oklch(0.982 0.006 250);
+  --muted: oklch(0.962 0.01 250);
+  --muted-foreground: oklch(0.5 0.03 255);
+  --primary: oklch(0.53 0.21 262);
+  --primary-foreground: oklch(0.99 0 0);
+  --accent: oklch(0.96 0.025 255);
+  --accent-foreground: oklch(0.42 0.17 262);
+  --border: oklch(0.91 0.012 250);
+  --input: oklch(0.88 0.015 250);
+  --ring: oklch(0.62 0.18 262);
+  --chart-1: oklch(0.53 0.21 262);
+  --chart-2: oklch(0.72 0.14 220);
+  --chart-3: oklch(0.56 0.21 290);
+  --chart-4: oklch(0.7 0.17 40);
+  --chart-5: oklch(0.7 0.13 180);
+}
+.dark[data-theme="ocean"] {
+  --background: oklch(0.16 0.02 262);
+  --card: oklch(0.205 0.025 262);
+  --popover: oklch(0.205 0.025 262);
+  --muted: oklch(0.255 0.025 262);
+  --muted-foreground: oklch(0.72 0.03 255);
+  --primary: oklch(0.6 0.19 262);
+  --primary-foreground: oklch(0.99 0 0);
+  --accent: oklch(0.28 0.06 262);
+  --accent-foreground: oklch(0.86 0.07 255);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.65 0.17 262);
+  --chart-1: oklch(0.68 0.17 262);
+  --chart-2: oklch(0.78 0.12 220);
+  --chart-3: oklch(0.7 0.16 290);
+  --chart-4: oklch(0.76 0.15 40);
+  --chart-5: oklch(0.76 0.12 180);
+}
+[data-theme="indigo"]:not(.dark) {
+  --background: oklch(0.984 0.004 265);
+  --muted: oklch(0.965 0.008 270);
+  --muted-foreground: oklch(0.5 0.03 270);
+  --primary: oklch(0.51 0.23 277);
+  --primary-foreground: oklch(0.99 0 0);
+  --accent: oklch(0.962 0.018 272);
+  --accent-foreground: oklch(0.42 0.2 277);
+  --border: oklch(0.91 0.01 270);
+  --input: oklch(0.88 0.012 270);
+  --ring: oklch(0.6 0.2 277);
+  --chart-1: oklch(0.51 0.23 277);
+  --chart-2: oklch(0.7 0.13 180);
+  --chart-3: oklch(0.77 0.16 70);
+  --chart-4: oklch(0.66 0.2 355);
+  --chart-5: oklch(0.68 0.15 230);
+}
+.dark[data-theme="indigo"] {
+  --background: oklch(0.16 0.02 277);
+  --card: oklch(0.205 0.025 277);
+  --popover: oklch(0.205 0.025 277);
+  --muted: oklch(0.255 0.025 277);
+  --muted-foreground: oklch(0.72 0.03 270);
+  --primary: oklch(0.6 0.2 277);
+  --primary-foreground: oklch(0.99 0 0);
+  --accent: oklch(0.28 0.07 277);
+  --accent-foreground: oklch(0.86 0.07 272);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.65 0.18 277);
+  --chart-1: oklch(0.68 0.18 277);
+  --chart-2: oklch(0.76 0.12 180);
+  --chart-3: oklch(0.82 0.14 75);
+  --chart-4: oklch(0.72 0.17 355);
+  --chart-5: oklch(0.75 0.12 230);
+}
+
+@keyframes thinking-dot {
+  0%, 80%, 100% { transform: translateY(0); opacity: 0.5; }
+  40% { transform: translateY(-4px); opacity: 1; }
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -156,6 +236,9 @@
   .markdown ol {
     @apply list-decimal space-y-1 pl-6;
   }
+  .markdown li::marker {
+    @apply text-muted-foreground;
+  }
   .markdown a {
     @apply font-medium text-primary underline-offset-4 hover:underline;
   }
@@ -181,7 +264,7 @@
     color: var(--shiki-dark);
   }
   .markdown blockquote {
-    @apply border-l-2 pl-4 text-muted-foreground;
+    @apply rounded-r-md border-l-[3px] border-primary/40 bg-accent px-4 py-1.5 text-accent-foreground;
   }
   .markdown table {
     @apply w-full border-collapse text-sm;
