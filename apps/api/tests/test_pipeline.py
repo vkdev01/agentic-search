@@ -1,7 +1,7 @@
 from collections.abc import AsyncIterator
 from typing import Any
 
-from agentic_search_api.agent.pipeline import plan_input, run_agent
+from agentic_search_api.agent.pipeline import build_sources, plan_input, run_agent
 from agentic_search_api.config import Settings
 from agentic_search_api.providers.llm import Message
 from agentic_search_api.schemas import ChatMessage, SearchHit, UsageEvent
@@ -86,6 +86,15 @@ def test_plan_input_truncates_long_earlier_messages() -> None:
     history = [ChatMessage(role="assistant", content="a" * 5000), ChatMessage(role="user", content="next")]
     text = plan_input(history)
     assert "a" * 800 in text and "a" * 801 not in text and text.endswith("next")
+
+
+def test_build_sources_dedupes_and_keeps_every_query_per_source() -> None:
+    hit = lambda url: SearchHit(title=url, url=url)  # noqa: E731
+    hits = [("q1", hit("https://a")), ("q2", hit("https://a")), ("q2", hit("https://b")), ("q3", hit("https://c"))]
+
+    sources = build_sources(hits, limit=2)
+
+    assert [(s.id, s.url, s.queries) for s in sources] == [(1, "https://a", ["q1", "q2"]), (2, "https://b", ["q2"])]
 
 
 async def test_usage_event_reports_context_breakdown_and_cost() -> None:

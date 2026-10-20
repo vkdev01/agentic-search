@@ -32,6 +32,7 @@ class SearchHit(BaseModel):
 
 class Source(SearchHit):
     id: int
+    queries: list[str] = []
 
 
 class PlanEvent(BaseModel):
