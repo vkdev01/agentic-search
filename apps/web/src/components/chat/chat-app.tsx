@@ -4,8 +4,8 @@ import { Moon, Plus, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { applyEvent, streamChat } from "@/lib/chat-stream";
-import type { ChatMessage, Thread } from "@/lib/types";
+import { ApiError, applyEvent, fetchApiInfo, streamChat } from "@/lib/chat-stream";
+import type { ApiInfo, ChatMessage, Thread } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { Composer } from "./composer";
 import { MessageView } from "./message";
@@ -38,10 +38,20 @@ export function ChatApp() {
   const [threads, setThreads] = useState<Thread[]>(() => [newThread("initial")]);
   const [activeId, setActiveId] = useState("initial");
   const [busy, setBusy] = useState(false);
+  const [webSearch, setWebSearch] = useState(true);
+  const [apiInfo, setApiInfo] = useState<ApiInfo | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const active = threads.find((t) => t.id === activeId) ?? threads[0];
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchApiInfo(controller.signal)
+      .then(setApiInfo)
+      .catch(() => {});
+    return () => controller.abort();
+  }, []);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: "end" });
@@ -57,7 +67,13 @@ export function ChatApp() {
   const send = async (text: string) => {
     const threadId = active.id;
     const user: ChatMessage = { id: crypto.randomUUID(), role: "user", content: text };
-    const assistant: ChatMessage = { id: crypto.randomUUID(), role: "assistant", content: "", status: "streaming" };
+    const assistant: ChatMessage = {
+      id: crypto.randomUUID(),
+      role: "assistant",
+      content: "",
+      status: "streaming",
+      webSearch,
+    };
     const history = [...active.messages.filter((m) => m.status !== "error" && m.content), user].map(
       ({ role, content }) => ({ role, content }),
     );
@@ -78,14 +94,23 @@ export function ChatApp() {
     abortRef.current = controller;
     setBusy(true);
     try {
-      await streamChat(history, (event) => updateMessage(threadId, assistant.id, (m) => applyEvent(m, event)), controller.signal);
+      await streamChat(
+        history,
+        webSearch,
+        (event) => updateMessage(threadId, assistant.id, (m) => applyEvent(m, event)),
+        controller.signal,
+      );
       updateMessage(threadId, assistant.id, (m) => (m.status === "streaming" ? { ...m, status: "done" } : m));
     } catch (error) {
       const stopped = controller.signal.aborted;
       updateMessage(threadId, assistant.id, (m) => ({
         ...m,
         status: stopped ? "stopped" : "error",
-        error: stopped ? undefined : "Couldn't reach the research API. Is the backend running?",
+        error: stopped
+          ? undefined
+          : error instanceof ApiError
+            ? error.message
+            : "Couldn't reach the research API. Is the backend running?",
       }));
       if (!stopped) console.error(error);
     } finally {
@@ -167,7 +192,14 @@ export function ChatApp() {
         </div>
 
         <div className="mx-auto w-full max-w-3xl px-4 pb-4">
-          <Composer busy={busy} onSend={send} onStop={() => abortRef.current?.abort()} />
+          <Composer
+            busy={busy}
+            webSearch={webSearch}
+            apiInfo={apiInfo}
+            onToggleWebSearch={() => setWebSearch((on) => !on)}
+            onSend={send}
+            onStop={() => abortRef.current?.abort()}
+          />
           <p className="mt-2 text-center text-xs text-muted-foreground">Answers are generated from web results and can be wrong. Check the sources.</p>
         </div>
       </main>

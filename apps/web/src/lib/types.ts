@@ -17,10 +17,17 @@ export interface ChatMessage {
   id: string;
   role: Role;
   content: string;
+  webSearch?: boolean;
   steps?: SearchStep[];
   sources?: Source[];
   status?: "streaming" | "done" | "error" | "stopped";
   error?: string;
+}
+
+export interface ApiInfo {
+  status: string;
+  llm: string;
+  search: string;
 }
 
 export interface Thread {

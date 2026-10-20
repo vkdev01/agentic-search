@@ -1,21 +1,52 @@
-import type { AgentEvent, ChatMessage } from "./types";
+import type { AgentEvent, ApiInfo, ChatMessage } from "./types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const MAX_HISTORY_MESSAGES = 12;
+const MAX_PRIOR_ANSWER_CHARS = 8000;
+
+export class ApiError extends Error {}
+
+/** Keeps recent turns only and shortens long earlier answers so follow-ups stay within API limits. */
+export function trimHistory(messages: Pick<ChatMessage, "role" | "content">[]) {
+  return messages.slice(-MAX_HISTORY_MESSAGES).map((m, i, all) =>
+    i < all.length - 1 && m.content.length > MAX_PRIOR_ANSWER_CHARS
+      ? { ...m, content: `${m.content.slice(0, MAX_PRIOR_ANSWER_CHARS)}\n…[truncated]` }
+      : m,
+  );
+}
+
+async function errorMessage(response: Response): Promise<string> {
+  try {
+    const body = await response.json();
+    const detail = Array.isArray(body.detail) ? body.detail[0]?.msg : body.detail;
+    if (typeof detail === "string") return detail.replace(/^Value error, /, "");
+  } catch {
+    // fall through to the generic message
+  }
+  return `Request failed (${response.status})`;
+}
+
+export async function fetchApiInfo(signal?: AbortSignal): Promise<ApiInfo> {
+  const response = await fetch(`${API_URL}/health`, { signal });
+  if (!response.ok) throw new Error(`Health check failed (${response.status})`);
+  return (await response.json()) as ApiInfo;
+}
 
 /** POSTs the conversation and invokes `onEvent` for each server-sent event (EventSource can't POST). */
 export async function streamChat(
   messages: Pick<ChatMessage, "role" | "content">[],
+  webSearch: boolean,
   onEvent: (event: AgentEvent) => void,
   signal: AbortSignal,
 ): Promise<void> {
   const response = await fetch(`${API_URL}/api/chat`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ messages }),
+    body: JSON.stringify({ messages: trimHistory(messages), web_search: webSearch }),
     signal,
   });
   if (!response.ok || !response.body) {
-    throw new Error(`Request failed (${response.status})`);
+    throw new ApiError(await errorMessage(response));
   }
 
   const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();

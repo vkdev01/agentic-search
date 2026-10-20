@@ -11,21 +11,24 @@ function hostname(url: string) {
   }
 }
 
-/** Turns inline [n] citations into links to the matching source. */
+/** Turns inline citations like [1] or [1, 2] into links to the matching sources. */
 function linkCitations(content: string, sources: Source[] = []) {
   const byId = new Map(sources.map((s) => [s.id, s]));
-  return content.replace(/\[(\d+)\](?!\()/g, (match, n: string) => {
-    const source = byId.get(Number(n));
-    return source ? `[[${n}]](${source.url})` : match;
+  return content.replace(/\[(\d+(?:\s*,\s*\d+)*)\](?!\()/g, (match, ids: string) => {
+    const links = ids.split(",").map((n) => {
+      const source = byId.get(Number(n.trim()));
+      return source ? `[[${n.trim()}]](${source.url})` : null;
+    });
+    return links.every(Boolean) ? links.join("") : match;
   });
 }
 
 function ResearchSteps({ message }: { message: ChatMessage }) {
   const steps = message.steps ?? [];
   if (steps.length === 0) {
-    return message.status === "streaming" ? (
+    return message.status === "streaming" && !message.content ? (
       <p className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Loader2 className="size-4 animate-spin" /> Planning searches…
+        <Loader2 className="size-4 animate-spin" /> {message.webSearch === false ? "Thinking…" : "Planning searches…"}
       </p>
     ) : null;
   }
