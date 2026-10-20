@@ -1,8 +1,7 @@
 "use client";
 
-import { Check, Clock, Gauge, Globe, Loader2, Network, RotateCcw, TriangleAlert, X } from "lucide-react";
+import { ChevronDown, Clock, Gauge, Network, RotateCcw, TriangleAlert } from "lucide-react";
 import { useMemo, useState } from "react";
-import { BrandMark } from "@/components/brand-mark";
 import { formatClock, formatDuration, useElapsedTime } from "@/lib/time";
 import type { ChatMessage, RunUsage, Source } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -11,103 +10,131 @@ import { CopyButton } from "./markdown/code-block";
 import { RichMarkdown } from "./markdown/markdown";
 import { ResearchGraph } from "./research-graph";
 
-const DOT_DELAYS_MS = [0, 150, 300];
+const STEP_DOT = { started: "animate-pulse bg-chart-3", done: "bg-chart-5", failed: "bg-destructive" } as const;
 
-function ThinkingIndicator({ label, since }: { label: string; since?: number }) {
+function Thinking({ label, since }: { label: string; since?: number }) {
   const elapsed = useElapsedTime(since);
   return (
-    <div className="flex items-center gap-3 text-sm text-muted-foreground" role="status">
-      <span className="flex gap-1" aria-hidden>
-        {DOT_DELAYS_MS.map((delay) => (
-          <span
-            key={delay}
-            className="size-2 rounded-full bg-primary"
-            style={{ animation: `thinking-dot 1s ease-in-out ${delay}ms infinite` }}
-          />
-        ))}
+    <div className="flex items-center gap-2.5 text-sm" role="status">
+      <span className="relative flex size-2" aria-hidden>
+        <span className="absolute inset-0 animate-ping rounded-full bg-primary/50" />
+        <span className="relative size-2 rounded-full bg-primary" />
       </span>
-      <span>
-        {label} · <span className="tabular-nums">{formatClock(elapsed)}</span>
-      </span>
+      <span className="text-shimmer font-medium">{label}</span>
+      <span className="text-xs text-muted-foreground tabular-nums">{formatClock(elapsed)}</span>
     </div>
   );
 }
 
-function ResearchSteps({ message, question }: { message: ChatMessage; question: string }) {
+function ResearchTrail({ message, question }: { message: ChatMessage; question: string }) {
+  const [expanded, setExpanded] = useState<boolean | null>(null);
   const [showGraph, setShowGraph] = useState(false);
   const cited = useMemo(() => citedIds(message.content), [message.content]);
   const steps = message.steps ?? [];
+  const streaming = message.status === "streaming";
+  const waiting = streaming && !message.content;
+
   if (steps.length === 0) {
-    return message.status === "streaming" && !message.content ? (
-      <ThinkingIndicator
-        label={message.webSearch === false ? "Thinking" : "Planning searches"}
-        since={message.startedAt}
-      />
+    return waiting ? (
+      <Thinking label={message.webSearch === false ? "Thinking" : "Planning searches"} since={message.startedAt} />
     ) : null;
   }
 
   const researching = steps.some((s) => s.status === "started");
+  const open = expanded ?? streaming;
+  const sourceCount = message.sources?.length ?? 0;
   return (
-    <details open={researching || message.status === "streaming"} className="group rounded-xl border bg-muted/40 px-4 py-3 text-sm">
-      <summary className="cursor-pointer list-none font-medium text-muted-foreground select-none">
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
         {researching ? (
-          <span className="inline-flex items-center gap-2">
-            <Loader2 className="size-3.5 animate-spin text-primary" /> Researching…
-          </span>
+          <Thinking label="Searching the web" since={message.startedAt} />
         ) : (
-          `Searched ${steps.length} queries · ${message.sources?.length ?? 0} sources`
+          <button
+            type="button"
+            onClick={() => setExpanded(!open)}
+            aria-expanded={open}
+            className="inline-flex items-center gap-1.5 text-muted-foreground transition-colors hover:text-foreground"
+          >
+            <ChevronDown className={cn("size-3.5 transition-transform", !open && "-rotate-90")} />
+            Searched {steps.length} {steps.length === 1 ? "query" : "queries"} · {sourceCount} sources
+          </button>
         )}
-      </summary>
-      <ul className="mt-3 space-y-1.5">
-        {steps.map((step) => (
-          <li key={step.query} className="flex items-center gap-2">
-            {step.status === "started" && <Loader2 className="size-3.5 shrink-0 animate-spin text-muted-foreground" />}
-            {step.status === "done" && <Check className="size-3.5 shrink-0 text-emerald-500" />}
-            {step.status === "failed" && <X className="size-3.5 shrink-0 text-destructive" />}
-            <span className="truncate">{step.query}</span>
-            {step.status === "done" && <span className="ml-auto shrink-0 text-xs text-muted-foreground">{step.count}</span>}
-          </li>
-        ))}
-      </ul>
-      {!researching && message.status !== "streaming" && (message.sources?.length ?? 0) > 0 && (
-        <>
+        {!streaming && sourceCount > 0 && (
           <button
             type="button"
             onClick={() => setShowGraph((on) => !on)}
             aria-expanded={showGraph}
-            className="mt-3 inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+            className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           >
-            <Network className="size-3.5" /> {showGraph ? "Hide" : "Show"} research graph
+            <Network className="size-3.5" /> {showGraph ? "Hide graph" : "Research graph"}
           </button>
-          {showGraph && (
-            <ResearchGraph question={question} steps={steps} sources={message.sources ?? []} citedIds={cited} />
-          )}
-        </>
+        )}
+      </div>
+      {(open || researching) && (
+        <ul className="flex flex-wrap gap-1.5">
+          {steps.map((step, i) => (
+            <li
+              key={step.query}
+              style={{ animationDelay: `${i * 60}ms` }}
+              className="animate-rise inline-flex max-w-full items-center gap-1.5 rounded-full border bg-background/70 px-2.5 py-1 text-xs backdrop-blur"
+            >
+              <span className={cn("size-1.5 shrink-0 rounded-full", STEP_DOT[step.status])} aria-hidden />
+              <span className="truncate">{step.query}</span>
+              {step.status === "done" && <span className="text-muted-foreground tabular-nums">{step.count}</span>}
+              {step.status === "failed" && <span className="sr-only">failed</span>}
+            </li>
+          ))}
+        </ul>
       )}
-    </details>
+      {waiting && !researching && <Thinking label="Reading sources" since={message.startedAt} />}
+      {showGraph && <ResearchGraph question={question} steps={steps} sources={message.sources ?? []} citedIds={cited} />}
+    </div>
   );
 }
 
-function SourceList({ sources }: { sources: Source[] }) {
+function hostHue(host: string) {
+  let hue = 0;
+  for (const ch of host) hue = (hue * 31 + ch.charCodeAt(0)) % 360;
+  return hue;
+}
+
+/** Horizontally scrolling source cards; sources the answer didn't cite are dimmed. */
+function SourceStrip({ sources, content }: { sources: Source[]; content: string }) {
+  const cited = useMemo(() => new Set(citedIds(content)), [content]);
   return (
-    <ol className="grid gap-2 sm:grid-cols-2">
-      {sources.map((source) => (
-        <li key={source.id}>
-          <a
-            href={source.url}
-            target="_blank"
-            rel="noreferrer"
-            className="flex h-full flex-col gap-1 rounded-lg border bg-background p-3 text-xs transition-colors hover:border-primary/40 hover:bg-accent"
-          >
-            <span className="flex items-center gap-1.5 text-muted-foreground">
-              <Globe className="size-3" />
-              <span className="truncate">{hostname(source.url)}</span>
-              <span className="ml-auto font-mono">[{source.id}]</span>
-            </span>
-            <span className="line-clamp-2 font-medium">{source.title}</span>
-          </a>
-        </li>
-      ))}
+    <ol
+      className="-mx-1 flex snap-x gap-2 overflow-x-auto px-1 pt-1 pb-2 mask-[linear-gradient(to_right,black_88%,transparent)] [scrollbar-width:none]"
+      aria-label="Sources"
+    >
+      {sources.map((source) => {
+        const host = hostname(source.url);
+        return (
+          <li key={source.id} className="w-56 shrink-0 snap-start">
+            <a
+              href={source.url}
+              target="_blank"
+              rel="noreferrer"
+              className={cn(
+                "flex h-full flex-col gap-2 rounded-xl border bg-background/70 p-3 backdrop-blur transition hover:-translate-y-0.5 hover:border-foreground/15 hover:shadow-lg hover:shadow-foreground/5",
+                cited.size > 0 && !cited.has(source.id) && "opacity-60 hover:opacity-100",
+              )}
+            >
+              <span className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span
+                  aria-hidden
+                  className="grid size-5 shrink-0 place-items-center rounded-md text-[10px] font-semibold text-white"
+                  style={{ background: `oklch(0.62 0.14 ${hostHue(host)})` }}
+                >
+                  {host.charAt(0).toUpperCase()}
+                </span>
+                <span className="truncate">{host}</span>
+                <span className="ml-auto font-mono">{source.id}</span>
+              </span>
+              <span className="line-clamp-2 text-[13px] leading-snug font-medium">{source.title}</span>
+            </a>
+          </li>
+        );
+      })}
     </ol>
   );
 }
@@ -123,7 +150,7 @@ function usageSummary(usage: RunUsage) {
 function ResponseMeta({ message, onRetry }: { message: ChatMessage; onRetry?: () => void }) {
   const failed = message.status === "error" || message.status === "stopped";
   return (
-    <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 pl-1 text-xs text-muted-foreground">
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground opacity-70 transition-opacity group-hover/turn:opacity-100 focus-within:opacity-100">
       {message.durationMs !== undefined && (
         <span className="flex items-center gap-1" title="From sending the question until the answer finished">
           <Clock className="size-3" />
@@ -150,61 +177,66 @@ function ResponseMeta({ message, onRetry }: { message: ChatMessage; onRetry?: ()
   );
 }
 
-export function MessageView({
-  message,
-  question = "",
+function Answer({ message, question, onRetry }: { message: ChatMessage; question: string; onRetry?: () => void }) {
+  const streaming = message.status === "streaming";
+  const sources = message.sources ?? [];
+  return (
+    <div className="mt-4 space-y-5">
+      <ResearchTrail message={message} question={question} />
+      {message.content && (
+        <div>
+          <RichMarkdown content={message.content} sources={sources} streaming={streaming} />
+          {streaming && <span className="ml-1 inline-block size-2 animate-pulse rounded-full bg-primary align-middle" />}
+        </div>
+      )}
+      {message.status === "error" && (
+        <p
+          className="flex items-start gap-2 rounded-xl border border-destructive/25 bg-destructive/5 px-3.5 py-2.5 text-sm text-destructive"
+          role="alert"
+        >
+          <TriangleAlert className="mt-0.5 size-4 shrink-0" /> {message.error}
+        </p>
+      )}
+      {message.status === "stopped" && <p className="text-sm text-muted-foreground">Stopped.</p>}
+      {sources.length > 0 && !streaming && <SourceStrip sources={sources} content={message.content} />}
+      {!streaming && <ResponseMeta message={message} onRetry={onRetry} />}
+    </div>
+  );
+}
+
+/** One question and its answer, drawn as a node on the conversation's thread line. */
+export function Turn({
+  index,
+  question,
+  answer,
   onRetry,
 }: {
-  message: ChatMessage;
-  question?: string;
+  index: number;
+  question: string;
+  answer?: ChatMessage;
   onRetry?: () => void;
 }) {
-  if (message.role === "user") {
-    return (
-      <div className="flex justify-end">
-        <p className="max-w-[80%] rounded-2xl rounded-tr-sm bg-primary px-4 py-2.5 text-[15px] whitespace-pre-wrap text-primary-foreground shadow-sm">
-          {message.content}
-        </p>
-      </div>
-    );
-  }
-
-  const failed = message.status === "error";
+  const long = question.length > 160;
   return (
-    <div className="flex gap-3">
-      <BrandMark className="mt-0.5" />
-      <div className="min-w-0 flex-1">
-        <div
-          className={cn(
-            "space-y-4 rounded-2xl rounded-tl-sm border px-5 py-4 shadow-sm",
-            failed ? "border-destructive/30 bg-destructive/5" : "bg-card",
-          )}
-        >
-          <ResearchSteps message={message} question={question} />
-          {message.content && (
-            <div>
-              <RichMarkdown
-                content={message.content}
-                sources={message.sources ?? []}
-                streaming={message.status === "streaming"}
-              />
-              {message.status === "streaming" && (
-                <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse bg-primary/70 align-middle" />
-              )}
-            </div>
-          )}
-          {failed && (
-            <p className="flex items-start gap-2 text-sm text-destructive" role="alert">
-              <TriangleAlert className="mt-0.5 size-4 shrink-0" /> {message.error}
-            </p>
-          )}
-          {message.status === "stopped" && <p className="text-xs text-muted-foreground">Stopped.</p>}
-          {message.sources && message.sources.length > 0 && message.status !== "streaming" && (
-            <SourceList sources={message.sources} />
-          )}
-        </div>
-        {message.status !== "streaming" && <ResponseMeta message={message} onRetry={onRetry} />}
-      </div>
-    </div>
+    <section id={`turn-${index}`} data-turn={index} className="group/turn animate-rise relative scroll-mt-4 pb-12 pl-7 sm:pl-9">
+      <span aria-hidden className="absolute top-5 bottom-0 left-[5px] w-px bg-linear-to-b from-border to-transparent sm:left-[7px]" />
+      <span
+        aria-hidden
+        className={cn(
+          "absolute top-2 left-0 size-[11px] rounded-full ring-4 ring-background sm:top-2.5 sm:left-0.5",
+          answer?.status === "streaming" && "animate-[node-pulse_1.6s_ease-out_infinite]",
+        )}
+        style={{ background: `var(--chart-${(index % 5) + 1})` }}
+      />
+      <h2
+        className={cn(
+          "text-pretty whitespace-pre-wrap",
+          long ? "text-base leading-7 font-medium" : "text-xl font-semibold tracking-tight sm:text-2xl",
+        )}
+      >
+        {question}
+      </h2>
+      {answer && <Answer message={answer} question={question} onRetry={onRetry} />}
+    </section>
   );
 }

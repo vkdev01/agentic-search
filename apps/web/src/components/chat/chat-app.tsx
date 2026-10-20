@@ -1,15 +1,17 @@
 "use client";
 
-import { Moon, Plus, Sun } from "lucide-react";
+import { ArrowUpRight, History, Moon, Plus, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useRef, useState } from "react";
 import { BrandMark } from "@/components/brand-mark";
-import { Button } from "@/components/ui/button";
+import { CanvasBackdrop } from "@/components/canvas-backdrop";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ApiError, applyEvent, fetchApiInfo, streamChat } from "@/lib/chat-stream";
 import type { ApiInfo, ChatMessage, Thread } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { Composer } from "./composer";
-import { MessageView } from "./message";
+import { Turn } from "./message";
+import { TurnOutline } from "./turn-outline";
 
 const EXAMPLES = [
   "What changed in the latest Next.js release?",
@@ -18,22 +20,71 @@ const EXAMPLES = [
   "Compare PostgreSQL, MySQL and MongoDB for a startup backend",
 ];
 
-const SEARCH_LABEL: Record<string, string> = { searxng: "SearXNG", mock: "mock search" };
+const ICON_BUTTON =
+  "grid size-8 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-40 [&_svg]:size-4";
 
 const newThread = (id: string = crypto.randomUUID()): Thread => ({ id, title: "New chat", messages: [] });
 
 function ThemeToggle() {
   const { resolvedTheme, setTheme } = useTheme();
   return (
-    <Button
-      variant="ghost"
-      size="icon"
+    <button
+      type="button"
+      className={ICON_BUTTON}
       aria-label="Toggle color mode"
+      title="Toggle color mode"
       onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
     >
       <Sun className="hidden dark:block" />
       <Moon className="dark:hidden" />
-    </Button>
+    </button>
+  );
+}
+
+function ThreadMenu({
+  threads,
+  activeId,
+  disabled,
+  onSelect,
+}: {
+  threads: Thread[];
+  activeId: string;
+  disabled: boolean;
+  onSelect: (id: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button type="button" className={ICON_BUTTON} aria-label="Chat history" title="Chat history" disabled={disabled}>
+          <History />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="end" sideOffset={8} className="w-72 gap-1 rounded-xl p-1.5">
+        <p className="px-2 pt-1 pb-1 text-xs font-medium text-muted-foreground">Chats</p>
+        <nav aria-label="Conversations" className="max-h-80 space-y-0.5 overflow-y-auto">
+          {threads.map((thread, i) => (
+            <button
+              key={thread.id}
+              type="button"
+              onClick={() => {
+                onSelect(thread.id);
+                setOpen(false);
+              }}
+              aria-current={thread.id === activeId ? "page" : undefined}
+              className={cn(
+                "flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+                thread.id === activeId && "bg-muted text-foreground",
+              )}
+            >
+              <span aria-hidden className="size-1.5 shrink-0 rounded-full" style={{ background: `var(--chart-${(i % 5) + 1})` }} />
+              <span className="truncate">{thread.title}</span>
+              <span className="ml-auto text-xs tabular-nums opacity-60">{Math.ceil(thread.messages.length / 2)}</span>
+            </button>
+          ))}
+        </nav>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -45,9 +96,14 @@ export function ChatApp() {
   const [webSearch, setWebSearch] = useState(true);
   const [apiInfo, setApiInfo] = useState<ApiInfo | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const active = threads.find((t) => t.id === activeId) ?? threads[0];
+  const turns = active.messages.flatMap((m, i) => {
+    const next = active.messages[i + 1];
+    return m.role === "user" ? [{ question: m, answer: next?.role === "assistant" ? next : undefined }] : [];
+  });
 
   useEffect(() => {
     const controller = new AbortController();
@@ -133,117 +189,115 @@ export function ChatApp() {
     setActiveId(thread.id);
   };
 
+  const composer = (autoFocus: boolean) => (
+    <Composer
+      busy={busy}
+      webSearch={webSearch}
+      apiInfo={apiInfo}
+      messages={active.messages}
+      autoFocus={autoFocus}
+      onToggleWebSearch={() => setWebSearch((on) => !on)}
+      onSend={send}
+      onStop={() => abortRef.current?.abort()}
+    />
+  );
+
   return (
-    <div className="flex h-dvh bg-background">
-      <aside className="hidden w-64 shrink-0 flex-col border-r bg-card/60 p-3 md:flex">
-        <div className="mb-4 flex items-center gap-2.5 px-1">
-          <BrandMark />
-          <span className="text-sm font-semibold">Agentic Search</span>
+    <div className="relative isolate flex h-dvh flex-col overflow-hidden">
+      <CanvasBackdrop />
+
+      <header className="relative z-20 flex items-center justify-between gap-4 px-4 py-3 sm:px-6">
+        <div className="flex min-w-0 items-center gap-2.5 text-sm">
+          <BrandMark spinning={busy} />
+          <span className="shrink-0 font-semibold tracking-tight">Agentic Search</span>
+          {turns.length > 0 && (
+            <>
+              <span aria-hidden className="text-muted-foreground/40">
+                /
+              </span>
+              <h1 className="truncate text-muted-foreground">{active.title}</h1>
+            </>
+          )}
         </div>
-        <Button variant="outline" className="justify-start gap-2 bg-background shadow-sm" onClick={startNewChat} disabled={busy}>
-          <Plus /> New chat
-        </Button>
-        <nav aria-label="Conversations" className="mt-4 flex-1 space-y-1 overflow-y-auto">
-          {threads.map((thread) => (
-            <button
-              key={thread.id}
-              type="button"
-              disabled={busy}
-              onClick={() => setActiveId(thread.id)}
-              aria-current={thread.id === active.id ? "page" : undefined}
-              className={cn(
-                "w-full truncate rounded-md px-3 py-2 text-left text-sm text-muted-foreground hover:bg-muted hover:text-foreground disabled:pointer-events-none",
-                thread.id === active.id && "bg-accent font-medium text-accent-foreground",
-              )}
-            >
-              {thread.title}
-            </button>
-          ))}
-        </nav>
-        <div className="flex items-center justify-between border-t pt-3">
-          <span className="text-xs text-muted-foreground">Theme</span>
+        <div className="flex shrink-0 items-center gap-0.5 rounded-full border bg-background/60 p-1 shadow-sm backdrop-blur-md">
+          <ThreadMenu threads={threads} activeId={active.id} disabled={busy} onSelect={setActiveId} />
+          <button
+            type="button"
+            className={ICON_BUTTON}
+            aria-label="New chat"
+            title="New chat"
+            onClick={startNewChat}
+            disabled={busy || turns.length === 0}
+          >
+            <Plus />
+          </button>
           <ThemeToggle />
         </div>
-      </aside>
+      </header>
 
-      <main className="flex min-w-0 flex-1 flex-col">
-        <header className="border-b bg-background/80 backdrop-blur">
-          <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-3">
-            <div className="flex items-center gap-3">
-              <BrandMark className="md:hidden" />
-              <div>
-                <h1 className="text-sm font-semibold">{active.messages.length ? active.title : "Agentic Search"}</h1>
-                <p className="text-xs text-muted-foreground">
-                  Web research with cited answers
-                  {apiInfo && ` · ${apiInfo.llm} · ${SEARCH_LABEL[apiInfo.search] ?? apiInfo.search}`}
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center md:hidden">
-              <Button variant="ghost" size="icon" aria-label="New chat" onClick={startNewChat} disabled={busy}>
-                <Plus />
-              </Button>
-              <ThemeToggle />
+      <div
+        ref={scrollRef}
+        className={cn(
+          "flex-1 overflow-y-auto",
+          turns.length > 0 && "mask-[linear-gradient(to_bottom,transparent,black_24px,black_calc(100%-48px),transparent)]",
+        )}
+      >
+        {turns.length === 0 ? (
+          <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col justify-center px-5 pb-[14vh]">
+            <BrandMark size="lg" className="animate-rise mb-7" />
+            <h1 className="animate-rise text-4xl font-semibold tracking-tight text-balance [animation-delay:60ms] sm:text-5xl">
+              What do you want to{" "}
+              <span className="bg-linear-to-r from-chart-1 via-chart-2 to-chart-3 bg-clip-text text-transparent">understand</span>?
+            </h1>
+            <p className="animate-rise mt-3 max-w-xl text-muted-foreground [animation-delay:120ms]">
+              The agent searches the web, reads the sources and writes a cited answer with tables, charts and diagrams.
+            </p>
+            <div className="animate-rise mt-8 [animation-delay:180ms]">{composer(true)}</div>
+            <div className="mt-5 flex flex-wrap gap-2">
+              {EXAMPLES.map((example, i) => (
+                <button
+                  key={example}
+                  type="button"
+                  onClick={() => send(example)}
+                  style={{ animationDelay: `${240 + i * 60}ms` }}
+                  className="group animate-rise inline-flex items-center gap-2 rounded-full border bg-background/60 px-3.5 py-1.5 text-sm text-muted-foreground backdrop-blur transition hover:-translate-y-0.5 hover:border-foreground/20 hover:text-foreground hover:shadow-md hover:shadow-foreground/5"
+                >
+                  <span aria-hidden className="size-1.5 rounded-full" style={{ background: `var(--chart-${(i % 5) + 1})` }} />
+                  {example}
+                  <ArrowUpRight className="-ml-0.5 size-3.5 opacity-0 transition group-hover:opacity-100" />
+                </button>
+              ))}
             </div>
           </div>
-        </header>
-
-        <div className="flex-1 overflow-y-auto">
-          <div className="mx-auto w-full max-w-4xl space-y-6 px-4 py-6">
-            {active.messages.length === 0 ? (
-              <div className="flex flex-col items-center pt-[12vh] text-center">
-                <BrandMark size="lg" className="mb-4" />
-                <h2 className="text-2xl font-semibold tracking-tight">What would you like to research?</h2>
-                <p className="mt-2 max-w-md text-sm text-muted-foreground">
-                  The agent plans web searches, reads the results and answers with citations, tables and charts.
-                </p>
-                <div className="mt-8 grid w-full max-w-2xl gap-2 sm:grid-cols-2">
-                  {EXAMPLES.map((example) => (
-                    <button
-                      key={example}
-                      type="button"
-                      onClick={() => send(example)}
-                      className="rounded-xl border bg-card px-4 py-3 text-left text-sm text-foreground/80 shadow-sm transition hover:border-primary/40 hover:text-accent-foreground hover:shadow"
-                    >
-                      {example}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              active.messages.map((message, i) => {
-                const question = active.messages[i - 1]?.role === "user" ? active.messages[i - 1].content : "";
-                return (
-                  <MessageView
-                    key={message.id}
-                    message={message}
-                    question={question}
-                    onRetry={!busy && question ? () => send(question) : undefined}
-                  />
-                );
-              })
-            )}
+        ) : (
+          <div className="mx-auto w-full max-w-3xl px-5 pt-6 pb-10">
+            {turns.map((turn, i) => (
+              <Turn
+                key={turn.question.id}
+                index={i}
+                question={turn.question.content}
+                answer={turn.answer}
+                onRetry={busy ? undefined : () => send(turn.question.content)}
+              />
+            ))}
             <div ref={bottomRef} />
           </div>
-        </div>
+        )}
+      </div>
 
-        <div className="border-t bg-background/60 backdrop-blur">
-          <div className="mx-auto w-full max-w-4xl px-4 py-3">
-            <Composer
-              busy={busy}
-              webSearch={webSearch}
-              apiInfo={apiInfo}
-              messages={active.messages}
-              onToggleWebSearch={() => setWebSearch((on) => !on)}
-              onSend={send}
-              onStop={() => abortRef.current?.abort()}
-            />
-            <p className="mt-1.5 text-center text-[11px] text-muted-foreground">
-              Enter to send · Shift+Enter for a new line · Answers can be wrong, so check the sources
-            </p>
+      {turns.length > 0 && (
+        <>
+          <TurnOutline key={active.id} questions={turns.map((t) => t.question.content)} root={scrollRef} />
+          <div className="relative z-10 shrink-0 px-4 pb-3">
+            <div className="mx-auto max-w-3xl">
+              {composer(false)}
+              <p className="mt-2 text-center text-[11px] text-muted-foreground">
+                {apiInfo && `${apiInfo.llm} · `}Shift+Enter for a new line · Answers can be wrong, so check the sources
+              </p>
+            </div>
           </div>
-        </div>
-      </main>
+        </>
+      )}
     </div>
   );
 }

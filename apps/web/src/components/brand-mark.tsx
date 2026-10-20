@@ -1,24 +1,32 @@
-import { Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const SIZES = {
-  sm: "size-8 rounded-lg [&_svg]:size-4",
-  md: "size-9 rounded-xl [&_svg]:size-4.5",
-  lg: "size-14 rounded-2xl [&_svg]:size-7",
+  sm: "size-5",
+  md: "size-7",
+  lg: "size-12",
 } as const;
 
-/** App identity tile: brand-colored square with the sparkles icon. */
-export function BrandMark({ size = "sm", className }: { size?: keyof typeof SIZES; className?: string }) {
+/** App identity: a ring in the theme's chart colors; it spins while the agent is working. */
+export function BrandMark({
+  size = "sm",
+  spinning = false,
+  className,
+}: {
+  size?: keyof typeof SIZES;
+  spinning?: boolean;
+  className?: string;
+}) {
   return (
     <span
       aria-hidden
       className={cn(
-        "inline-flex shrink-0 items-center justify-center bg-linear-to-br from-primary to-primary/75 text-primary-foreground shadow-sm",
+        "relative inline-block shrink-0 rounded-full bg-[conic-gradient(from_140deg,var(--chart-1),var(--chart-2),var(--chart-3),var(--chart-4),var(--chart-1))]",
+        spinning && "animate-spin [animation-duration:2.5s]",
         SIZES[size],
         className,
       )}
     >
-      <Sparkles />
+      <span className="absolute inset-[24%] rounded-full bg-background" />
     </span>
   );
 }
