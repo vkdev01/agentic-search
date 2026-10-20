@@ -54,6 +54,11 @@ def test_chat_streams_full_pipeline_with_mocks(client: TestClient) -> None:
     assert [s["id"] for s in sources] == list(range(1, len(sources) + 1))
     assert len({s["url"] for s in sources}) == len(sources)
 
+    usage = next(data for name, data in events if name == "usage")
+    assert types[-2:] == ["usage", "done"]
+    assert [c["purpose"] for c in usage["calls"]] == ["search_plan", "answer"]
+    assert usage["context_tokens"] > 0 and usage["breakdown"]["sources"] > 0
+
 
 def test_chat_rejects_empty_messages(client: TestClient) -> None:
     assert client.post("/api/chat", json={"messages": []}).status_code == 422
@@ -83,7 +88,7 @@ def test_chat_rejects_invalid_question(client: TestClient, messages: list[dict])
 def test_chat_without_web_search_skips_planning_and_search(client: TestClient) -> None:
     response = client.post("/api/chat", json={"messages": [{"role": "user", "content": "hello"}], "web_search": False})
     types = [name for name, _ in parse_sse(response.text)]
-    assert set(types) == {"token", "done"} and types[-1] == "done"
+    assert set(types) == {"token", "usage", "done"} and types[-2:] == ["usage", "done"]
 
 
 @respx.mock

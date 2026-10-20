@@ -12,6 +12,11 @@ Message = dict[str, str]
 
 
 class LLM(Protocol):
+    model: str
+    max_tokens: int | None
+    records: list[LLMCallRecord]
+    """Calls made during the current request, in order."""
+
     async def complete_json(self, messages: list[Message], schema: dict[str, Any], name: str) -> dict[str, Any]: ...
 
     def stream(self, messages: list[Message], purpose: str = "answer") -> AsyncIterator[str]: ...
@@ -48,10 +53,11 @@ class OpenAICompatibleLLM:
             base_url=base_url, api_key=api_key, default_headers=default_headers, http_client=http_client
         )
         self._provider = provider
-        self._model = model
+        self.model = model
         self._run_id = run_id
         self._store = store
-        self._max_tokens = max_tokens
+        self.max_tokens = max_tokens
+        self.records: list[LLMCallRecord] = []
         self._json_extra = json_extra or {}
         self._stream_extra = stream_extra or {}
 
@@ -60,30 +66,31 @@ class OpenAICompatibleLLM:
             run_id=self._run_id,
             purpose=purpose,
             provider=self._provider,
-            model=self._model,
+            model=self.model,
             stream=stream,
             request_params=params,
             input_chars=sum(len(m["content"]) for m in messages),
         )
 
     def _save(self, record: LLMCallRecord) -> None:
+        self.records.append(record)
         if self._store:
             self._store.insert(record)
 
     async def complete_json(self, messages: list[Message], schema: dict[str, Any], name: str) -> dict[str, Any]:
-        params: dict[str, Any] = {"temperature": 0.2, "max_tokens": self._max_tokens, **self._json_extra}
+        params: dict[str, Any] = {"temperature": 0.2, "max_tokens": self.max_tokens, **self._json_extra}
         record = self._new_record(name, stream=False, messages=messages, params={**params, "response_format": name})
         start = time.perf_counter()
         try:
             response = await self._client.chat.completions.create(
-                model=self._model,
+                model=self.model,
                 messages=messages,  # type: ignore[arg-type]
                 response_format={
                     "type": "json_schema",
                     "json_schema": {"name": name, "schema": schema, "strict": True},
                 },
                 temperature=params["temperature"],
-                max_tokens=self._max_tokens,
+                max_tokens=self.max_tokens,
                 extra_body=self._json_extra,
             )
             choice = response.choices[0]
@@ -107,16 +114,16 @@ class OpenAICompatibleLLM:
             self._save(record)
 
     async def stream(self, messages: list[Message], purpose: str = "answer") -> AsyncIterator[str]:
-        params: dict[str, Any] = {"temperature": 0.3, "max_tokens": self._max_tokens, **self._stream_extra}
+        params: dict[str, Any] = {"temperature": 0.3, "max_tokens": self.max_tokens, **self._stream_extra}
         record = self._new_record(purpose, stream=True, messages=messages, params=params)
         start = time.perf_counter()
         try:
             stream = await self._client.chat.completions.create(
-                model=self._model,
+                model=self.model,
                 messages=messages,  # type: ignore[arg-type]
                 stream=True,
                 temperature=params["temperature"],
-                max_tokens=self._max_tokens,
+                max_tokens=self.max_tokens,
                 extra_body=self._stream_extra,
             )
             async for chunk in stream:
@@ -150,11 +157,36 @@ class OpenAICompatibleLLM:
 
 
 class MockLLM:
-    """Deterministic stand-in so the full pipeline runs without API keys."""
+    """Deterministic stand-in so the full pipeline runs without API keys. Usage is estimated (~4 chars/token)."""
+
+    model = "mock"
+    max_tokens = 2048
+
+    def __init__(self) -> None:
+        self.records: list[LLMCallRecord] = []
+
+    def _record(self, purpose: str, messages: list[Message], output: str) -> None:
+        record = LLMCallRecord(
+            run_id="mock",
+            purpose=purpose,
+            provider="mock",
+            model=self.model,
+            stream=purpose != "search_plan",
+            request_params={},
+            input_chars=sum(len(m["content"]) for m in messages),
+            output_chars=len(output),
+            latency_ms=0.0,
+        )
+        record.prompt_tokens = record.input_chars // 4
+        record.completion_tokens = len(output) // 4
+        record.total_tokens = record.prompt_tokens + record.completion_tokens
+        self.records.append(record)
 
     async def complete_json(self, messages: list[Message], schema: dict[str, Any], name: str) -> dict[str, Any]:
-        question = messages[-1]["content"]
-        return {"queries": [question, f"{question} explained", f"{question} latest"]}
+        question = messages[-1]["content"].rsplit("\n", 1)[-1]
+        result = {"queries": [question, f"{question} explained", f"{question} latest"]}
+        self._record(name, messages, json.dumps(result))
+        return result
 
     async def stream(self, messages: list[Message], purpose: str = "answer") -> AsyncIterator[str]:
         answer = (
@@ -164,3 +196,4 @@ class MockLLM:
         for word in answer.split(" "):
             await asyncio.sleep(0.02)
             yield word + " "
+        self._record(purpose, messages, answer)

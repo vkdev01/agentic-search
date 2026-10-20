@@ -7,7 +7,9 @@ from agentic_search_api.providers.llm import LLM, Message
 from agentic_search_api.providers.search import SearchProvider
 from agentic_search_api.schemas import (
     AgentEvent,
+    CallUsage,
     ChatMessage,
+    ContextBreakdown,
     DoneEvent,
     PlanEvent,
     SearchEvent,
@@ -15,6 +17,7 @@ from agentic_search_api.schemas import (
     Source,
     SourcesEvent,
     TokenEvent,
+    UsageEvent,
 )
 
 log = logging.getLogger(__name__)
@@ -95,20 +98,68 @@ def build_sources(hits: list[SearchHit], limit: int) -> list[Source]:
     return sources
 
 
-def answer_messages(history: list[ChatMessage], sources: list[Source]) -> list[Message]:
+def sources_block(sources: list[Source]) -> str:
     context = "\n\n".join(f'<source id="{s.id}" url="{s.url}">\n{s.title}\n{s.snippet}\n</source>' for s in sources)
-    messages: list[Message] = [{"role": "system", "content": f"{ANSWER_PROMPT}\n\n<sources>\n{context}\n</sources>"}]
-    messages += [{"role": m.role, "content": m.content} for m in history]
-    return messages
+    return f"\n\n<sources>\n{context}\n</sources>"
 
 
-async def stream_without_sources(
-    history: list[ChatMessage], llm: LLM, system_prompt: str, purpose: str
+def chat_messages(history: list[ChatMessage], system_prompt: str) -> list[Message]:
+    return [{"role": "system", "content": system_prompt}, *({"role": m.role, "content": m.content} for m in history)]
+
+
+def context_breakdown(messages: list[Message], sources_chars: int, prompt_tokens: int) -> ContextBreakdown:
+    """Splits the final call's prompt tokens across its parts in proportion to their character counts."""
+    conversation = messages[1:]
+    parts = {
+        "instructions": len(messages[0]["content"]) - sources_chars,
+        "sources": sources_chars,
+        "history": sum(len(m["content"]) for m in conversation[:-1]),
+        "question": len(conversation[-1]["content"]) if conversation else 0,
+    }
+    total = sum(parts.values()) or 1
+    return ContextBreakdown(**{name: round(prompt_tokens * chars / total) for name, chars in parts.items()})
+
+
+def usage_event(llm: LLM, settings: Settings, messages: list[Message], sources_chars: int) -> UsageEvent:
+    calls = [
+        CallUsage(
+            purpose=r.purpose,
+            prompt_tokens=r.prompt_tokens,
+            completion_tokens=r.completion_tokens,
+            reasoning_tokens=r.reasoning_tokens,
+            cached_tokens=r.cached_tokens,
+            latency_ms=r.latency_ms,
+            ttft_ms=r.ttft_ms,
+        )
+        for r in llm.records
+    ]
+    final = llm.records[-1] if llm.records else None
+    context_tokens = final.prompt_tokens if final and final.prompt_tokens is not None else 0
+
+    cost = None
+    if settings.price_input_per_mtok is not None and settings.price_output_per_mtok is not None:
+        prompt = sum(c.prompt_tokens or 0 for c in calls)
+        completion = sum(c.completion_tokens or 0 for c in calls)
+        cost = (prompt * settings.price_input_per_mtok + completion * settings.price_output_per_mtok) / 1_000_000
+
+    return UsageEvent(
+        model=llm.model,
+        context_window=settings.context_window_tokens,
+        context_tokens=context_tokens,
+        reserved_output_tokens=llm.max_tokens,
+        breakdown=context_breakdown(messages, sources_chars, context_tokens),
+        calls=calls,
+        cost=cost,
+        currency=settings.price_currency if cost is not None else None,
+    )
+
+
+async def stream_answer(
+    llm: LLM, settings: Settings, messages: list[Message], purpose: str, sources_chars: int = 0
 ) -> AsyncIterator[AgentEvent]:
-    messages: list[Message] = [{"role": "system", "content": system_prompt}]
-    messages += [{"role": m.role, "content": m.content} for m in history]
     async for text in llm.stream(messages, purpose=purpose):
         yield TokenEvent(text=text)
+    yield usage_event(llm, settings, messages, sources_chars)
     yield DoneEvent()
 
 
@@ -116,14 +167,14 @@ async def run_agent(
     history: list[ChatMessage], llm: LLM, search: SearchProvider, settings: Settings, web_search: bool = True
 ) -> AsyncIterator[AgentEvent]:
     if not web_search:
-        async for event in stream_without_sources(history, llm, DIRECT_PROMPT, purpose="chat"):
+        async for event in stream_answer(llm, settings, chat_messages(history, DIRECT_PROMPT), "chat"):
             yield event
         return
 
     queries = await plan_queries(history, llm, settings.max_sub_queries)
     yield PlanEvent(queries=queries)
     if not queries:
-        async for event in stream_without_sources(history, llm, FOLLOW_UP_PROMPT, purpose="follow_up"):
+        async for event in stream_answer(llm, settings, chat_messages(history, FOLLOW_UP_PROMPT), "follow_up"):
             yield event
         return
 
@@ -145,6 +196,7 @@ async def run_agent(
     sources = build_sources(hits, settings.max_sources)
     yield SourcesEvent(sources=sources)
 
-    async for text in llm.stream(answer_messages(history, sources)):
-        yield TokenEvent(text=text)
-    yield DoneEvent()
+    block = sources_block(sources)
+    messages = chat_messages(history, ANSWER_PROMPT + block)
+    async for event in stream_answer(llm, settings, messages, "answer", sources_chars=len(block)):
+        yield event

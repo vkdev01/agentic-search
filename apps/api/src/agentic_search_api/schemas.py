@@ -60,9 +60,40 @@ class DoneEvent(BaseModel):
     type: Literal["done"] = "done"
 
 
+class CallUsage(BaseModel):
+    purpose: str
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
+    reasoning_tokens: int | None = None
+    cached_tokens: int | None = None
+    latency_ms: float | None = None
+    ttft_ms: float | None = None
+
+
+class ContextBreakdown(BaseModel):
+    """Approximate split of the final call's prompt tokens, proportional to characters."""
+
+    instructions: int = 0
+    sources: int = 0
+    history: int = 0
+    question: int = 0
+
+
+class UsageEvent(BaseModel):
+    type: Literal["usage"] = "usage"
+    model: str
+    context_window: int
+    context_tokens: int
+    reserved_output_tokens: int | None = None
+    breakdown: ContextBreakdown
+    calls: list[CallUsage]
+    cost: float | None = None
+    currency: str | None = None
+
+
 class ErrorEvent(BaseModel):
     type: Literal["error"] = "error"
     message: str
 
 
-AgentEvent = PlanEvent | SearchEvent | SourcesEvent | TokenEvent | DoneEvent | ErrorEvent
+AgentEvent = PlanEvent | SearchEvent | SourcesEvent | TokenEvent | UsageEvent | DoneEvent | ErrorEvent

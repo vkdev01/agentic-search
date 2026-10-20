@@ -7,7 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore", env_ignore_empty=True)
 
     llm_provider: Literal["mock", "sarvam", "ollama"] = "mock"
     sarvam_api_key: SecretStr | None = None
@@ -27,6 +27,11 @@ class Settings(BaseSettings):
     max_sources: int = 10
 
     llm_usage_db: Path = Path("data/llm_usage.db")
+    context_window_tokens: int = 128_000
+    # Optional pricing per 1M tokens; when unset the UI shows tokens only.
+    price_input_per_mtok: float | None = None
+    price_output_per_mtok: float | None = None
+    price_currency: str = "INR"
 
     cors_origins: list[str] = ["http://localhost:3000"]
 
