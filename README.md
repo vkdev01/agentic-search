@@ -21,12 +21,14 @@ Real search: `make searxng` and set `SEARCH_PROVIDER=searxng`.
 
 Pick the model per chat from the menu in the composer. The list comes from [apps/api/models.yaml](apps/api/models.yaml):
 
-- **Local:** run `ollama serve`; every model you `ollama pull` appears automatically (LM Studio and vLLM work the same way).
+- **Local:** run `OLLAMA_CONTEXT_LENGTH=8192 ollama serve`; every model you `ollama pull` appears automatically (LM Studio and vLLM work the same way).
 - **Hosted:** a provider shows up once its key is set in `apps/api/.env` (Sarvam is preconfigured: set `SARVAM_API_KEY`).
   OpenAI, Gemini, Anthropic, Groq and OpenRouter are commented-out templates in `models.yaml`: uncomment one and add its key.
 - **Any other OpenAI-compatible API:** add a provider block with its `base_url` and `api_key_env`; no code changes.
 
 `DEFAULT_MODEL` (e.g. `ollama/llama3.2:1b`) sets the starting model; otherwise `default_model` in `models.yaml` is used.
+
+How model selection works, running Ollama, and context size vs memory: [docs/models-and-ollama.md](docs/models-and-ollama.md).
 
 `make test` and `make lint` run the same checks as CI.
 
