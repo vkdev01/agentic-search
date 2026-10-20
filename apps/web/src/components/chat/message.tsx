@@ -1,7 +1,7 @@
-import { Check, Globe, Loader2, Sparkles, X } from "lucide-react";
+import { Check, Gauge, Globe, Loader2, Sparkles, X } from "lucide-react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import type { ChatMessage, Source } from "@/lib/types";
+import type { ChatMessage, RunUsage, Source } from "@/lib/types";
 
 function hostname(url: string) {
   try {
@@ -78,6 +78,20 @@ function SourceList({ sources }: { sources: Source[] }) {
   );
 }
 
+function UsageLine({ usage }: { usage: RunUsage }) {
+  const tokens = usage.calls.reduce((acc, c) => acc + (c.prompt_tokens ?? 0) + (c.completion_tokens ?? 0), 0);
+  const reasoning = usage.calls.reduce((acc, c) => acc + (c.reasoning_tokens ?? 0), 0);
+  const seconds = usage.calls.reduce((acc, c) => acc + (c.latency_ms ?? 0), 0) / 1000;
+  return (
+    <p className="flex items-center gap-1.5 text-xs text-muted-foreground tabular-nums">
+      <Gauge className="size-3" />
+      {tokens.toLocaleString()} tokens
+      {reasoning > 0 && ` (${reasoning.toLocaleString()} reasoning)`} · {usage.calls.length} LLM call
+      {usage.calls.length === 1 ? "" : "s"} · {seconds.toFixed(1)}s
+    </p>
+  );
+}
+
 export function MessageView({ message }: { message: ChatMessage }) {
   if (message.role === "user") {
     return (
@@ -110,6 +124,7 @@ export function MessageView({ message }: { message: ChatMessage }) {
         {message.sources && message.sources.length > 0 && message.status !== "streaming" && (
           <SourceList sources={message.sources} />
         )}
+        {message.usage && <UsageLine usage={message.usage} />}
       </div>
     </div>
   );

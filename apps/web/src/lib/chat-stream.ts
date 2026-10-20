@@ -1,4 +1,4 @@
-import type { AgentEvent, ApiInfo, ChatMessage } from "./types";
+import type { AgentEvent, ApiInfo, ChatMessage, RunUsage } from "./types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const MAX_HISTORY_MESSAGES = 12;
@@ -85,6 +85,19 @@ export function applyEvent(message: ChatMessage, event: AgentEvent): ChatMessage
       return { ...message, sources: event.sources };
     case "token":
       return { ...message, content: message.content + event.text };
+    case "usage": {
+      const usage: RunUsage = {
+        model: event.model,
+        context_window: event.context_window,
+        context_tokens: event.context_tokens,
+        reserved_output_tokens: event.reserved_output_tokens,
+        breakdown: event.breakdown,
+        calls: event.calls,
+        cost: event.cost,
+        currency: event.currency,
+      };
+      return { ...message, usage };
+    }
     case "done":
       return { ...message, status: "done" };
     case "error":

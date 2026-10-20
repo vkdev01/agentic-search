@@ -196,6 +196,7 @@ export function ChatApp() {
             busy={busy}
             webSearch={webSearch}
             apiInfo={apiInfo}
+            messages={active.messages}
             onToggleWebSearch={() => setWebSearch((on) => !on)}
             onSend={send}
             onStop={() => abortRef.current?.abort()}

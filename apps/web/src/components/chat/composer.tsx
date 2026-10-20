@@ -4,8 +4,9 @@ import { ArrowUp, Globe, Square } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import type { ApiInfo } from "@/lib/types";
+import type { ApiInfo, ChatMessage } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { SessionUsage } from "./session-usage";
 
 const SEARCH_LABEL: Record<string, string> = { searxng: "SearXNG", mock: "mock results" };
 
@@ -13,6 +14,7 @@ export function Composer({
   busy,
   webSearch,
   apiInfo,
+  messages,
   onToggleWebSearch,
   onSend,
   onStop,
@@ -20,6 +22,7 @@ export function Composer({
   busy: boolean;
   webSearch: boolean;
   apiInfo: ApiInfo | null;
+  messages: ChatMessage[];
   onToggleWebSearch: () => void;
   onSend: (text: string) => void;
   onStop: () => void;
@@ -75,7 +78,8 @@ export function Composer({
           {webSearch && apiInfo && <span className="opacity-70">· {SEARCH_LABEL[apiInfo.search] ?? apiInfo.search}</span>}
         </button>
         {apiInfo && <span className="text-xs text-muted-foreground">Model: {apiInfo.llm}</span>}
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-1">
+          <SessionUsage messages={messages} />
           {busy ? (
             <Button type="button" size="icon" onClick={onStop} aria-label="Stop" className="rounded-full">
               <Square className="size-3.5 fill-current" />
